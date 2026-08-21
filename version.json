@@ -1,7 +1,7 @@
 {
-  "version": "v1.0.0_dev_1787347514298",
-  "buildTime": 1787347514298,
+  "version": "v1.3.6",
+  "buildTime": 1787348400000,
   "platform": "app",
   "env": "dev",
-  "dataRoot": "taiwan_data_dev"
+  "dataRoot": "taiwan_data"
 }
