@@ -1,5 +1,5 @@
-// [BUILD] v1.0.0_dev_1787346508294
-window.TW_BUILD_VERSION = "v1.0.0_dev_1787346508294";
+// [BUILD] v1.0.0_dev_1787346879160
+window.TW_BUILD_VERSION = "v1.0.0_dev_1787346879160";
 
 // [DEV BUILD] 測試環境 — 資料導向 taiwan_data_dev/，不污染正式資料
 window.TW_DEV_MODE = true;
@@ -3909,6 +3909,7 @@ var Users = (function() {
       role: data.role || 'viewer',
       permissions: (data.permissions && typeof data.permissions === 'object') ? data.permissions : {},
       enabled: data.enabled !== false,
+      pwdHash: data.pwdHash || null, // 自建帳號機制：sha256(email:pwd)，登入比對用
       createdAt: data.createdAt || now,
       _fbKey: data.id || ('U' + now), // _fbKey = uid，Auth 直接以 uid 查雲端 profile
       _updatedAt: now,
@@ -3953,6 +3954,19 @@ var Users = (function() {
     EventBus.emit(EVENTS.USER_DELETED, id);
   }
 
+  // Auth 內部用：更新密碼雜湊（本人改密碼——已由 Auth 層驗證原密碼，不需 userMgmt 權限）
+  function setPwdHash(id, pwdHash) {
+    var arr = State.get('users') || [];
+    var idx = arr.findIndex(function(u) { return u.id === id; });
+    if (idx < 0) return null;
+    arr[idx].pwdHash = pwdHash || null;
+    arr[idx]._updatedAt = Date.now();
+    save(arr);
+    var obj = {}; obj[arr[idx]._fbKey] = arr[idx];
+    enqueue(FB_PATH.USERS, obj);
+    return arr[idx];
+  }
+
   // 雲端 profile 回寫本機（Auth 登入時權威資料同步；不回推雲端避免回聲）
   function upsertFromCloud(rec) {
     if (!rec || !rec.id) return null;
@@ -3972,6 +3986,7 @@ var Users = (function() {
   return {
     load: load, save: save, getAll: getAll, getById: getById, getByEmail: getByEmail,
     count: count, create: create, update: update, remove: remove,
+    setPwdHash: setPwdHash,
     upsertFromCloud: upsertFromCloud,
   };
 })();
@@ -4253,8 +4268,8 @@ var Auth = (function() {
     if (!user) return { ok: false, error: '找不到本人帳號資料' };
     var oldHash = await _credentialHash(me.email, oldPwd);
     if (!oldHash || oldHash !== user.pwdHash) return { ok: false, error: '原密碼不正確' };
-    var updated = Users.update(me.uid, { pwdHash: await _credentialHash(me.email, newPwd) });
-    if (!updated) return { ok: false, error: '密碼更新失敗（權限或格式）' };
+    var updated = Users.setPwdHash(me.uid, await _credentialHash(me.email, newPwd));
+    if (!updated) return { ok: false, error: '密碼更新失敗（找不到帳號）' };
     if (typeof AuditLog !== 'undefined') AuditLog.log('auth', 'pwd_change', me.uid, '本人修改密碼', null, null);
     return { ok: true };
   }

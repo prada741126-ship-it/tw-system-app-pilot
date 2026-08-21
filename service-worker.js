@@ -6,7 +6,7 @@
  *   - 其他 → stale-while-revalidate
  */
 
-var CACHE_VERSION = 'tw-app-v1.3.3';  // 2026-08-22 自建帳號機制（pwdHash 存資料庫，不依賴 Firebase Auth Email/密碼供應商）
+var CACHE_VERSION = 'tw-app-v1.3.4';  // 2026-08-22 修正 Users.create 白名單漏存 pwdHash；本人改密碼改走 setPwdHash 閘門
 var STATIC_CACHE = CACHE_VERSION + '-static';
 var RUNTIME_CACHE = CACHE_VERSION + '-runtime';
 
