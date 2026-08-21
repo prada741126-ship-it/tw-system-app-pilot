@@ -1,5 +1,5 @@
-// [BUILD] v1.0.0_dev_1787288276488
-window.TW_BUILD_VERSION = "v1.0.0_dev_1787288276488";
+// [BUILD] v1.0.0_dev_1787344871822
+window.TW_BUILD_VERSION = "v1.0.0_dev_1787344871822";
 
 // [DEV BUILD] 測試環境 — 資料導向 taiwan_data_dev/，不污染正式資料
 window.TW_DEV_MODE = true;
@@ -5260,7 +5260,7 @@ var OverviewPage = (function() {
     if (activeTrips.length === 0) {
       html += Icons.empty('目前無進行中的團', '點擊「建立新團」開始一筆行程');
     } else {
-<div class="table-wrapper">      html += '<table class="data-table ov-trips-table"><thead><tr>';
+      html += '<div class="table-wrapper"><table class="data-table ov-trips-table"><thead><tr>';
       html += '<th>團ID</th><th>所屬股東</th><th>所屬代理</th><th>廳</th><th>成員</th><th>建立日</th><th>操作</th>';
       html += '</tr></thead><tbody>';
       activeTrips.forEach(function(trip) {
@@ -5282,7 +5282,7 @@ var OverviewPage = (function() {
         html += '<button class="btn-sm btn-primary" onclick="Router.go(\'member\');window._selectedTrip=\'' + trip.id + '\'">帳務</button></td>';
         html += '</tr>';
       });
-      html += '</tbody></table>';</div>
+      html += '</tbody></table></div>';
     }
     html += '</div>';
 
@@ -5299,7 +5299,7 @@ var OverviewPage = (function() {
     if (pendingTrips.length > 0) {
       html += '<div class="card alert-card">';
       html += '<div class="card-header"><h3>待結帳</h3></div>';
-<div class="table-wrapper">      html += '<table class="data-table"><thead><tr>';
+      html += '<div class="table-wrapper"><table class="data-table"><thead><tr>';
       html += '<th>團ID</th><th>股東</th><th>最後結帳</th><th>操作</th>';
       html += '</tr></thead><tbody>';
       pendingTrips.forEach(function(trip) {
@@ -5311,7 +5311,7 @@ var OverviewPage = (function() {
         html += '<td><button class="btn-sm btn-warning" onclick="Router.go(\'pending\')">處理</button></td>';
         html += '</tr>';
       });
-      html += '</tbody></table>';</div>
+      html += '</tbody></table></div>';
       html += '</div>';
     }
 
@@ -6086,7 +6086,7 @@ var MemberPage = (function() {
           memberGroups[mid].totalSettle += settleNT;
         });
 
-<div class="table-wrapper">        html += '<table class="mb-ap-table"><thead><tr>';
+        html += '<div class="table-wrapper"><table class="mb-ap-table"><thead><tr>';
         html += '<th>客名</th><th class="num">交收</th>';
         html += '</tr></thead><tbody>';
         var sumSettle = 0;
@@ -6103,7 +6103,7 @@ var MemberPage = (function() {
         html += '<td>合計</td>';
         html += '<td class="num ' + (sumSettle < 0 ? 'num-negative' : 'num-positive') + '">' + fmtCardNum(Math.trunc(sumSettle / 100) * 100) + '</td>';
         html += '</tr>';
-        html += '</tbody></table>';</div>
+        html += '</tbody></table></div>';
       } else {
         html += Icons.empty('此團無帳務記錄', '此團尚無任何帳務交易');
       }
@@ -6157,7 +6157,7 @@ var MemberPage = (function() {
         html += '</div>';
 
         // 各代理匯總表
-<div class="table-wrapper">        html += '<table class="mb-ap-table"><thead><tr>';
+        html += '<div class="table-wrapper"><table class="mb-ap-table"><thead><tr>';
         html += '<th>代理</th><th class="num">洗碼</th><th class="num">交收</th><th class="cell-center">操作</th>';
         html += '</tr></thead><tbody>';
         var grandWash = 0, grandSettle = 0;
@@ -6182,7 +6182,7 @@ var MemberPage = (function() {
         html += '<td class="num">' + fmtCardNum(grandWash) + '</td>';
         html += '<td class="num ' + (grandSettle < 0 ? 'num-negative' : 'num-positive') + '">' + fmtCardNum(Math.trunc(grandSettle / 100) * 100) + '</td>';
         html += '</tr>';
-        html += '</tbody></table>';</div>
+        html += '</tbody></table></div>';
       }
     }
 
@@ -6701,7 +6701,7 @@ var RoomPage = (function() {
         html += '</td>';
         html += '</tr>';
       });
-      html += '</tbody></table></div>';</div>
+      html += '</tbody></table></div>'
 
       /* 分頁控制 */
       html += '<div class="paginator">';
@@ -6796,7 +6796,7 @@ var RoomPage = (function() {
   function buildAgentQuotaCard(mtxs, tripBookings, agentIds) {
     var html = '<div class="rm-chart-card">';
     html += '<h4 class="rm-chart-title">代理級折抵</h4>';
-<div class="table-wrapper">    html += '<table class="data-table rm-quota-table"><thead><tr>';
+    html += '<div class="table-wrapper"><table class="data-table rm-quota-table"><thead><tr>';
     html += '<th>代理</th><th class="num">總洗碼(萬)</th><th class="num">總門檻</th><th>達標</th><th>配額</th>';
     html += '</tr></thead><tbody>';
     agentIds.forEach(function(aid) {
@@ -6817,7 +6817,7 @@ var RoomPage = (function() {
       html += '</td>';
       html += '</tr>';
     });
-    html += '</tbody></table></div>';</div>
+    html += '</tbody></table></div>'
     return html;
   }
 
@@ -7327,7 +7327,7 @@ var RoomPage = (function() {
       });
 
       html += '<div style="padding:12px;">';
-<div class="table-wrapper">      html += '<table class="data-table"><thead><tr>';
+      html += '<div class="table-wrapper"><table class="data-table"><thead><tr>';
       html += '<th>\u4EE3\u7406</th><th class="num">\u8A02\u623F</th><th class="num">\u623F\u665A</th><th class="num">\u9580\u6A2B(\u842C)</th><th class="num">\u6298\u62B5</th><th class="num">\u5269\u9918</th><th class="num">\u514D\u8CBB</th><th class="num">\u6536\u8CBB</th><th class="num">\u5BA2\u6536</th>';
       html += '</tr></thead><tbody>';
       Object.keys(agentSummary).forEach(function(aid) {
@@ -7345,7 +7345,7 @@ var RoomPage = (function() {
         html += '<td class="num">$' + s.charge.toLocaleString() + '</td>';
         html += '</tr>';
       });
-      html += '</tbody></table></div>';</div>
+      html += '</tbody></table></div>'
     }
 
     html += '</div>';
@@ -7368,7 +7368,7 @@ var RoomPage = (function() {
         var rooms = HotelConfig.getRooms(casino, hotelName);
         html += '<div style="margin-left:12px;margin-bottom:8px;">';
         html += '<div style="font-weight:600;margin:4px 0;color:var(--text-primary);">' + escHtml(hotelName) + '</div>';
-<div class="table-wrapper">        html += '<table class="data-table text-sm"><thead><tr>';
+        html += '<div class="table-wrapper"><table class="data-table text-sm"><thead><tr>';
         html += '<th>房型</th><th>代碼</th><th class="num">門檻(萬)</th><th>操作</th>';
         html += '</tr></thead><tbody>';
         rooms.forEach(function(r) {
@@ -7379,7 +7379,7 @@ var RoomPage = (function() {
           html += '<td><button class="btn-sm btn-danger" onclick="RoomPage.delHotelConfig(\'' + r.id + '\')">刪</button></td>';
           html += '</tr>';
         });
-        html += '</tbody></table>';</div>
+        html += '</tbody></table></div>';
         html += '</div>';
       });
 
@@ -7702,7 +7702,7 @@ var FeesPage = (function() {
         html += '<td><button class="btn-sm" onclick="FeesPage.editBooking(\'' + b.id + '\')">編輯</button></td>';
         html += '</tr>';
       });
-      html += '</tbody></table></div>';</div>
+      html += '</tbody></table></div>'
 
       /* 分頁 */
       html += '<div class="paginator">';
@@ -7754,7 +7754,7 @@ var FeesPage = (function() {
       html += '<td class="num fw-semibold">' + agCharge.toLocaleString() + '</td>';
       html += '</tr>';
     });
-    html += '</tbody></table></div>';</div>
+    html += '</tbody></table></div>'
 
     container.innerHTML = html;
   }
@@ -8009,7 +8009,7 @@ var ProfitPage = (function() {
         html += '<td><button class="btn-sm btn-primary" onclick="ProfitPage.archiveOne(\'' + b.id + '\')">歸檔</button></td>';
         html += '</tr>';
       });
-      html += '</tbody></table></div>';</div>
+      html += '</tbody></table></div>'
 
       /* 分頁 */
       html += '<div class="paginator">';
@@ -8233,7 +8233,7 @@ var AgentPage = (function() {
         if (agentTxs.length > 0) {
           var halls = Settings.getVipHalls();
           html += '<details><summary>會員帳務明細</summary>';
-<div class="table-wrapper">          html += '<table class="data-table compact"><thead><tr>';
+          html += '<div class="table-wrapper"><table class="data-table compact"><thead><tr>';
           html += '<th>會員</th><th>廳</th><th>洗碼</th><th>交收金額</th>';
           html += '</tr></thead><tbody>';
           agentTxs.forEach(function(tx) {
@@ -8248,13 +8248,13 @@ var AgentPage = (function() {
             html += '<td>' + Math.round(settleNT).toLocaleString() + '</td>';
             html += '</tr>';
           });
-          html += '</tbody></table></details>';</div>
+          html += '</tbody></table></div></details>';
         }
 
         // 订房明细
         if (agentBookings.length > 0) {
           html += '<details><summary>訂房明細</summary>';
-<div class="table-wrapper">          html += '<table class="data-table compact"><thead><tr>';
+          html += '<div class="table-wrapper"><table class="data-table compact"><thead><tr>';
           html += '<th>客人</th><th>酒店</th><th>房型</th><th>入住</th><th>退房</th><th>門檻</th>';
           html += '</tr></thead><tbody>';
           agentBookings.forEach(function(b) {
@@ -8267,7 +8267,7 @@ var AgentPage = (function() {
             html += '<td>' + ((b.threshold || 0) / 10000).toFixed(0) + '萬</td>';
             html += '</tr>';
           });
-          html += '</tbody></table></details>';</div>
+          html += '</tbody></table></div></details>';
         }
 
         html += '</div>';
@@ -8779,7 +8779,7 @@ var ShareholderPage = (function() {
     html += '</div>';
 
     if (shareholders.length > 0 && totalShares > 0) {
-<div class="table-wrapper">      html += '<table class="sh-profit-table"><thead><tr>';
+      html += '<div class="table-wrapper"><table class="sh-profit-table"><thead><tr>';
       html += '<th>股東</th><th>持股</th><th>洗碼(萬)</th>';
       html += '<th class="num">資金股50%(HK)</th><th class="cell-center">貢獻度</th><th class="num">貢獻可得(HK)</th><th class="num">特殊月退(HK)</th><th class="num">額外收入(HK)</th>';
       html += '<th class="num">合計應付(HK)</th><th class="num">合計應付(TW)</th><th class="cell-center">操作</th>';
@@ -8843,7 +8843,7 @@ var ShareholderPage = (function() {
       html += '<td class="num num-positive">' + fmtHK(sumTW) + '</td>';
       html += '<td></td>';
       html += '</tr>';
-      html += '</tbody></table>';</div>
+      html += '</tbody></table></div>';
 
       // 有特殊代理時顯示口徑說明
       if (totalMonthlyOnlyWash > 0) {
@@ -8889,7 +8889,7 @@ var ShareholderPage = (function() {
         html += '</div>';
         // 右：貴賓廳明細
         html += '<div style="flex:1;min-width:0;">';
-<div class="table-wrapper">        html += '<table class="sh-hall-detail-table"><thead><tr>';
+        html += '<div class="table-wrapper"><table class="sh-hall-detail-table"><thead><tr>';
         html += '<th>貴賓廳</th><th>洗碼(萬)</th><th>盈利(HK)</th><th>月退費(HK)</th><th>合計(HK)</th><th>佔比</th>';
         html += '</tr></thead><tbody>';
         halls.forEach(function(hall) {
@@ -8924,7 +8924,7 @@ var ShareholderPage = (function() {
         html += '<td>' + fmtHK(grandTotal) + '</td>';
         html += '<td>100%</td>';
         html += '</tr>';
-        html += '</tbody></table>';</div>
+        html += '</tbody></table></div>';
         html += '</div>';
         html += '</div>';
       }
@@ -8968,7 +8968,7 @@ var ShareholderPage = (function() {
     html += '<button class="btn-sm" onclick="ShareholderPage.showAddExtra()">+ 新增</button>';
     html += '</div>';
     if (extraIncomes.length > 0 || ticketProfits.length > 0) {
-<div class="table-wrapper">      html += '<table class="sh-extra-table"><thead><tr>';
+      html += '<div class="table-wrapper"><table class="sh-extra-table"><thead><tr>';
       html += '<th>描述</th><th class="num">金額(HK)</th><th>操作</th>';
       html += '</tr></thead><tbody>';
       // 手動額外收入
@@ -8991,7 +8991,7 @@ var ShareholderPage = (function() {
         html += '</tr>';
       });
       html += '<tr class="total-row"><td>合計</td><td class="num">' + fmtHK(totalExtra) + '</td><td></td></tr>';
-      html += '</tbody></table>';</div>
+      html += '</tbody></table></div>';
       html += '<p style="font-size:var(--font-size-sm);color:var(--text-secondary);margin-top:4px;">依持股比例分配至各股東</p>';
     } else {
       html += Icons.empty('尚無額外收入', '點擊「新增收入」記錄第一筆');
@@ -10690,7 +10690,7 @@ var AuditLogPage = (function() {
       html += '</div>';
     } else {
       html += '<div style="overflow-x:auto;">';
-<div class="table-wrapper">      html += '<table style="width:100%;border-collapse:collapse;font-size:13px;">';
+      html += '<div class="table-wrapper"><table style="width:100%;border-collapse:collapse;font-size:13px;">';
       html += '<thead><tr style="border-bottom:2px solid var(--border,#ddd);text-align:left;">';
       html += '<th style="padding:8px 6px;white-space:nowrap;">時間</th>';
       html += '<th class="cell-pad-sm">操作者</th>';
@@ -10714,7 +10714,7 @@ var AuditLogPage = (function() {
         html += '</tr>';
       });
 
-      html += '</tbody></table>';</div>
+      html += '</tbody></table></div>';
       if (records.length > 50) {
         html += '<p style="text-align:center;padding:12px;color:var(--text-muted,#888);font-size:12px;">僅顯示最近 50 筆，共 ' + records.length + ' 筆紀錄</p>';
       }
