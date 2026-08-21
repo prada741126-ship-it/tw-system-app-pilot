@@ -6,7 +6,7 @@
  *   - 其他 → stale-while-revalidate
  */
 
-var CACHE_VERSION = 'tw-app-v1.3.1';  // 2026-08-22 修復 app.js 語法錯誤（table-wrapper 批次編輯損壞 26 處，首次設定精靈無法啟動）
+var CACHE_VERSION = 'tw-app-v1.3.2';  // 2026-08-22 雲端路徑改 taiwan_data（taiwan_data_dev 被 DB 規則封鎖）
 var STATIC_CACHE = CACHE_VERSION + '-static';
 var RUNTIME_CACHE = CACHE_VERSION + '-runtime';
 

@@ -1,5 +1,5 @@
-// [BUILD] v1.0.0_dev_1787344871822
-window.TW_BUILD_VERSION = "v1.0.0_dev_1787344871822";
+// [BUILD] v1.0.0_dev_1787345904989
+window.TW_BUILD_VERSION = "v1.0.0_dev_1787345904989";
 
 // [DEV BUILD] 測試環境 — 資料導向 taiwan_data_dev/，不污染正式資料
 window.TW_DEV_MODE = true;
@@ -52,7 +52,10 @@ var CONFIG = {
 // 未注入（正式出包、網頁版、Node 測試）一律走 taiwan_data 正式路徑
 // ============================================================================
 var _TW_IS_DEV = (typeof window !== 'undefined' && window.TW_DEV_MODE === true);
-var FB_DATA_ROOT = _TW_IS_DEV ? 'taiwan_data_dev' : 'taiwan_data';
+// 2026-08-22: 試點包改用 taiwan_data（該路徑為空且 DB 規則允許匿名讀寫；
+// taiwan_data_dev 不在規則白名單內，讀寫全被拒，無法建立帳號）
+var FB_DATA_ROOT = 'taiwan_data';
+// 本機 localStorage 仍用 dev 前綴，避免測試快取混入本機正式快取
 var STORAGE_PREFIX = _TW_IS_DEV ? 'tw1d_' : 'tw1_';
 
 // ============================================================================
