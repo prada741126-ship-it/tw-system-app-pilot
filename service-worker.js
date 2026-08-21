@@ -6,7 +6,7 @@
  *   - 其他 → stale-while-revalidate
  */
 
-var CACHE_VERSION = 'tw-app-v1.3.2';  // 2026-08-22 雲端路徑改 taiwan_data（taiwan_data_dev 被 DB 規則封鎖）
+var CACHE_VERSION = 'tw-app-v1.3.3';  // 2026-08-22 自建帳號機制（pwdHash 存資料庫，不依賴 Firebase Auth Email/密碼供應商）
 var STATIC_CACHE = CACHE_VERSION + '-static';
 var RUNTIME_CACHE = CACHE_VERSION + '-runtime';
 

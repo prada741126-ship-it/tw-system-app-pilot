@@ -1,5 +1,5 @@
-// [BUILD] v1.0.0_dev_1787345904989
-window.TW_BUILD_VERSION = "v1.0.0_dev_1787345904989";
+// [BUILD] v1.0.0_dev_1787346508294
+window.TW_BUILD_VERSION = "v1.0.0_dev_1787346508294";
 
 // [DEV BUILD] 測試環境 — 資料導向 taiwan_data_dev/，不污染正式資料
 window.TW_DEV_MODE = true;
@@ -3979,9 +3979,11 @@ var Users = (function() {
 
 // === src/core/auth.js ===
 /**
- * core/auth.js — Phase 1A 個別帳號認證（Firebase Auth email/password + 離線快取雙軌）
- * 線上：signInWithEmailAndPassword → users/{uid} profile 查驗（enabled/角色）→ 快取 session
- * 離線：本機快取（email + 密碼 hash + profile）比對，7 天寬限期內可離線登入（快取權限）
+ * core/auth.js — Phase 1A 個別帳號認證（自建帳號機制 + 離線快取雙軌）
+ * 2026-08-22 起：不再依賴 Firebase Auth Email/密碼供應商（後台未開啟且無法代開），
+ * 帳號憑證 = users 記錄內的 pwdHash（sha256(email + ':' + pwd)），存於 Realtime Database。
+ * 線上：FirebaseSync.once(users) → email 比對 + pwdHash 驗證 → 快取 session
+ * 離線：本機 users 集合（Watchers 同步）比對；無本機記錄 → 本機快取 7 天寬限登入
  * 首次設定：setupFirstAdmin() 偵測 users 集合為空 → 建立首位 super_admin
  * 依赖: core/constants.js, core/events.js, core/permissions.js, core/store.js, sync/firebase.js, data/users.js, data/auditLog.js
  */
@@ -4040,12 +4042,10 @@ var Auth = (function() {
       case 'auth/wrong-password':
       case 'auth/user-not-found':
       case 'auth/invalid-login-credentials': return '帳號或密碼錯誤';
-      case 'auth/invalid-email': return 'Email 格式不正確';
-      case 'auth/too-many-requests': return '嘗試次數過多，請稍後再試';
-      case 'auth/user-disabled': return '帳號已停用';
       default: return '登入失敗：' + ((e && e.message) || code || '未知錯誤');
     }
   }
+  void _friendlyError; // 保留給舊呼叫端相容（目前無使用）
 
   async function _applySession(profile, online, pwd) {
     _session = {
@@ -4091,35 +4091,48 @@ var Auth = (function() {
     return { ok: true, offline: true };
   }
 
+  // 帳號憑證雜湊：sha256(email + ':' + pwd)（email 當鹽，避免不同帳號同密碼同雜湊）
+  function _credentialHash(email, pwd) {
+    return sha256(String(email || '').toLowerCase() + ':' + String(pwd || ''));
+  }
+
+  // 雲端 users 集合（Map<uid, record>）；離線/逾時回 null
+  async function _fetchCloudUsers() {
+    try {
+      return await _withTimeout(FirebaseSync.once(FB_PATH.USERS), 12000);
+    } catch (e) { return null; }
+  }
+
+  function _findUserByEmail(map, email) {
+    var e = String(email || '').toLowerCase();
+    var found = null;
+    Object.keys(map || {}).forEach(function(k) {
+      var u = map[k];
+      if (u && !u._deleted && !found && String(u.email || '').toLowerCase() === e) found = u;
+    });
+    return found;
+  }
+
   async function login(email, pwd) {
     email = String(email || '').trim().toLowerCase();
     if (!email || !pwd) return { ok: false, error: '請輸入帳號與密碼' };
-    var auth = _auth();
-    if (auth) {
-      try {
-        var cred = await _withTimeout(auth.signInWithEmailAndPassword(email, pwd), 15000);
-        var uid = cred && cred.user ? cred.user.uid : '';
-        var profile = await _fetchProfile(uid);
-        if (!profile) {
-          try { await auth.signOut(); } catch (e) {}
-          return { ok: false, error: '此帳號尚未開通，請聯絡管理員設定' };
-        }
-        if (profile.enabled === false) {
-          try { await auth.signOut(); } catch (e) {}
-          return { ok: false, error: '帳號已停用，請聯絡管理員' };
-        }
-        await _applySession(profile, true, pwd);
-        if (typeof AuditLog !== 'undefined') AuditLog.log('auth', 'login', _session.uid, '登入系統', null, null);
-        return { ok: true };
-      } catch (e) {
-        var code = (e && e.code) || '';
-        if (code !== 'auth/network-request-failed') {
-          return { ok: false, error: _friendlyError(code, e) };
-        }
-        // 網路失敗 → 落入離線 fallback
-      }
+    var cloudUsers = await _fetchCloudUsers();
+    var online = !!cloudUsers;
+    var user = online ? _findUserByEmail(cloudUsers, email) : Users.getByEmail(email);
+    if (!user) {
+      // 雲端查無此人 → 帳密錯誤；離線且本機無記錄 → 最後嘗試本機快取離線登入
+      if (online) return { ok: false, error: '帳號或密碼錯誤' };
+      return _offlineLogin(email, pwd);
     }
-    return _offlineLogin(email, pwd);
+    if (user.enabled === false) return { ok: false, error: '帳號已停用，請聯絡管理員' };
+    var hash = await _credentialHash(email, pwd);
+    if (!hash || !user.pwdHash || user.pwdHash !== hash) {
+      return { ok: false, error: '帳號或密碼錯誤' };
+    }
+    if (online) { try { Users.upsertFromCloud(user); } catch (e) {} }
+    await _applySession(user, online, pwd);
+    if (typeof AuditLog !== 'undefined') AuditLog.log('auth', 'login', _session.uid, online ? '登入系統' : '離線登入（本機帳號比對）', null, null);
+    return { ok: true, offline: !online };
   }
 
   // 啟動時還原 session（7 天內有線上驗證過才有效；權限為快取版本）
@@ -4160,6 +4173,11 @@ var Auth = (function() {
     } catch (e) { /* 離線覆核失敗 → 維持快取權限 */ }
   }
 
+  // 產生本機 uid（自建帳號機制，不再使用 Firebase Auth uid）
+  function _newUid() {
+    return 'u' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  }
+
   // 首次設定精靈：users 集合（本機+雲端）為空 → 建立首位 super_admin 並自動登入
   async function setupFirstAdmin(name, email, pwd) {
     name = String(name || '').trim();
@@ -4167,7 +4185,7 @@ var Auth = (function() {
     if (!name) return { ok: false, error: '請輸入姓名' };
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { ok: false, error: 'Email 格式不正確' };
     if (String(pwd || '').length < 6) return { ok: false, error: '密碼至少需要 6 位' };
-    var auth = _auth();
+    var auth = _auth(); // 匿名連線（Realtime Database 讀寫身分）
     if (!auth) return { ok: false, error: '首次設定需要網路連線，請確認網路後重試' };
     try {
       var remote = null;
@@ -4175,23 +4193,21 @@ var Auth = (function() {
       if (remote && Object.keys(remote).length > 0) {
         return { ok: false, error: '系統已有管理員帳號，請直接登入' };
       }
-      var cred = await auth.createUserWithEmailAndPassword(email, pwd);
-      var uid = cred && cred.user ? cred.user.uid : '';
-      var user = Users.create({ id: uid, email: email, name: name, role: 'super_admin', enabled: true });
+      var uid = _newUid();
+      var user = Users.create({
+        id: uid, email: email, name: name, role: 'super_admin', enabled: true,
+        pwdHash: await _credentialHash(email, pwd),
+      });
       if (!user) throw new Error('帳號資料寫入失敗');
       await _applySession(user, true, pwd);
       if (typeof AuditLog !== 'undefined') AuditLog.log('auth', 'setup', uid, '首次設定：建立超級管理員 ' + name, null, null);
-      return { ok: true };
+      return { ok: true, uid: uid };
     } catch (e) {
-      var code = (e && e.code) || '';
-      if (code === 'auth/email-already-in-use') {
-        return { ok: false, error: '此 Email 已註冊過 Firebase 帳號，請聯絡管理員處理' };
-      }
-      return { ok: false, error: '建立失敗：' + ((e && e.message) || code || '未知錯誤') };
+      return { ok: false, error: '建立失敗：' + ((e && e.message) || '未知錯誤') };
     }
   }
 
-  // 管理員新增帳號：建 Firebase Auth 用戶 + 寫 users profile（不影響目前 UI session）
+  // 管理員新增帳號：直接寫 users 記錄（含 pwdHash），不經 Firebase Auth
   async function createUserAccount(data) {
     var email = String((data && data.email) || '').trim().toLowerCase();
     var name = String((data && data.name) || '').trim();
@@ -4201,39 +4217,46 @@ var Auth = (function() {
     if (String(pwd).length < 6) return { ok: false, error: '密碼至少需要 6 位' };
     var auth = _auth();
     if (!auth) return { ok: false, error: '新增帳號需要網路連線' };
-    try {
-      // 注意：createUserWithEmailAndPassword 會把 Firebase 連線身份切到新用戶
-      var cred = await auth.createUserWithEmailAndPassword(email, pwd);
-      Users.create({
-        id: cred.user.uid, email: email, name: name,
-        role: (data && data.role) || 'viewer',
-        permissions: (data && data.permissions) || {},
-        enabled: true,
-      });
-      await auth.signOut();
-      try { await auth.signInAnonymously(); } catch (e) {} // 恢復可寫 DB 的匿名連線
-      return { ok: true, uid: cred.user.uid };
-    } catch (e) {
-      var code = (e && e.code) || '';
-      if (code === 'auth/email-already-in-use') {
-        return { ok: false, error: '此 Email 已被使用（可能已在 Firebase 註冊）' };
-      }
-      return { ok: false, error: '建立失敗：' + ((e && e.message) || code || '未知錯誤') };
-    }
+    if (Users.getByEmail(email)) return { ok: false, error: '此 Email 已被使用' };
+    var cloudUsers = await _fetchCloudUsers();
+    if (cloudUsers && _findUserByEmail(cloudUsers, email)) return { ok: false, error: '此 Email 已被使用' };
+    var uid = _newUid();
+    var user = Users.create({
+      id: uid, email: email, name: name,
+      role: (data && data.role) || 'viewer',
+      permissions: (data && data.permissions) || {},
+      enabled: true,
+      pwdHash: await _credentialHash(email, pwd),
+    });
+    if (!user) return { ok: false, error: '建立失敗：資料寫入被擋（權限或格式）' };
+    return { ok: true, uid: uid };
   }
 
-  // 重設密碼：寄送 Firebase 密碼重設信（自己忘記密碼 / 管理員協助皆走此）
-  async function resetPassword(email) {
-    var auth = _auth();
-    if (!auth) return { ok: false, error: '需要網路連線' };
-    try {
-      await auth.sendPasswordResetEmail(String(email || '').trim().toLowerCase());
-      return { ok: true };
-    } catch (e) {
-      var code = (e && e.code) || '';
-      if (code === 'auth/user-not-found') return { ok: false, error: '此 Email 未註冊' };
-      return { ok: false, error: '寄送失敗：' + ((e && e.message) || code) };
-    }
+  // 管理員重設他人密碼：直接更新該帳號 pwdHash（自建帳號機制，無重設信）
+  async function resetPassword(email, newPwd) {
+    email = String(email || '').trim().toLowerCase();
+    if (String(newPwd || '').length < 6) return { ok: false, error: '新密碼至少需要 6 位' };
+    var user = Users.getByEmail(email);
+    if (!user) return { ok: false, error: '找不到此 Email 的帳號' };
+    var updated = Users.update(user.id, { pwdHash: await _credentialHash(email, newPwd) });
+    if (!updated) return { ok: false, error: '密碼更新失敗（權限或格式）' };
+    if (typeof AuditLog !== 'undefined') AuditLog.log('auth', 'pwd_reset', user.id, '管理員重設密碼：' + email, null, null);
+    return { ok: true };
+  }
+
+  // 本人修改密碼：需驗證原密碼
+  async function changeMyPassword(oldPwd, newPwd) {
+    var me = getCurrent();
+    if (!me) return { ok: false, error: '尚未登入' };
+    if (String(newPwd || '').length < 6) return { ok: false, error: '新密碼至少需要 6 位' };
+    var user = Users.getById(me.uid);
+    if (!user) return { ok: false, error: '找不到本人帳號資料' };
+    var oldHash = await _credentialHash(me.email, oldPwd);
+    if (!oldHash || oldHash !== user.pwdHash) return { ok: false, error: '原密碼不正確' };
+    var updated = Users.update(me.uid, { pwdHash: await _credentialHash(me.email, newPwd) });
+    if (!updated) return { ok: false, error: '密碼更新失敗（權限或格式）' };
+    if (typeof AuditLog !== 'undefined') AuditLog.log('auth', 'pwd_change', me.uid, '本人修改密碼', null, null);
+    return { ok: true };
   }
 
   async function forceLogout(reason) {
@@ -4279,6 +4302,7 @@ var Auth = (function() {
     setupFirstAdmin: setupFirstAdmin,
     createUserAccount: createUserAccount,
     resetPassword: resetPassword,
+    changeMyPassword: changeMyPassword,
     logout: logout,
     forceLogout: forceLogout,
     needsSetup: needsSetup,
@@ -10027,8 +10051,15 @@ var SettingsPage = (function() {
   async function resetMyPassword() {
     var me = Auth.getCurrent();
     if (!me) return;
-    var res = await Auth.resetPassword(me.email);
-    if (res.ok) Toast.success('密碼重設信已寄至 ' + me.email);
+    var oldPwd = prompt('請輸入目前的密碼');
+    if (oldPwd === null) return;
+    var newPwd = prompt('請輸入新密碼（至少 6 位）');
+    if (newPwd === null) return;
+    var newPwd2 = prompt('再輸入一次新密碼');
+    if (newPwd2 === null) return;
+    if (newPwd !== newPwd2) { Toast.error('兩次輸入的新密碼不一致'); return; }
+    var res = await Auth.changeMyPassword(oldPwd, newPwd);
+    if (res.ok) Toast.success('密碼已更新');
     else Toast.error(res.error);
   }
 
@@ -10075,8 +10106,10 @@ var SettingsPage = (function() {
   }
 
   async function resetUserPassword(email) {
-    var res = await Auth.resetPassword(email);
-    if (res.ok) Toast.success('密碼重設信已寄至 ' + email);
+    var newPwd = prompt('設定「' + email + '」的新密碼（至少 6 位）');
+    if (newPwd === null) return;
+    var res = await Auth.resetPassword(email, newPwd);
+    if (res.ok) Toast.success('密碼已重設：' + email);
     else Toast.error(res.error);
   }
 
@@ -10086,7 +10119,7 @@ var SettingsPage = (function() {
     if (!u) return;
     if (u.id === me.uid) { Toast.error('不可刪除自己的帳號'); return; }
     if (_protectedAccount(u)) { Toast.error('此帳號僅超級管理員可管理'); return; }
-    Modal.confirm('確定刪除帳號「' + (u.name || u.email) + '」？\n（該帳號將無法再登入；Firebase 登入憑證需於 Firebase Console 移除）', function() {
+    Modal.confirm('確定刪除帳號「' + (u.name || u.email) + '」？\n（該帳號將無法再登入）', function() {
       Users.remove(id);
       Toast.success('帳號已刪除');
       render();
