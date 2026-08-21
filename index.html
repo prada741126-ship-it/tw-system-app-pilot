@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta name="theme-color" content="#1a1a2e">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="台灣版整合">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="apple-touch-startup-image" href="icons/splash-1290x2796.png" media="(device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3)">
+<link rel="apple-touch-startup-image" href="icons/splash-1284x2778.png" media="(device-width: 428px) and (device-height: 926px) and (-webkit-device-pixel-ratio: 3)">
+<link rel="apple-touch-startup-image" href="icons/splash-1179x2556.png" media="(device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3)">
+<link rel="apple-touch-startup-image" href="icons/splash-1170x2532.png" media="(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3)">
+<link rel="apple-touch-startup-image" href="icons/splash-1125x2436.png" media="(device-width: 375px) and (device-height: 812px) and (-webkit-device-pixel-ratio: 3)">
+<link rel="apple-touch-startup-image" href="icons/splash-828x1792.png" media="(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 2)">
+<link rel="apple-touch-startup-image" href="icons/splash-750x1334.png" media="(device-width: 375px) and (device-height: 667px) and (-webkit-device-pixel-ratio: 2)">
+<title>台灣版整合系統</title>
+<link rel="stylesheet" href="app.css?v=1787287830822">
+</head>
+<body>
+
+<!-- 登入畫面（Phase 1A 個別帳號） -->
+<div id="login-overlay">
+  <div class="login-box">
+    <div class="login-icon"><img class="brand-mark" src="icons/icon-192.png" width="96" height="96" alt="博盈APP" draggable="false" /></div>
+    <h1>授 權 驗 證</h1>
+    <div class="login-sub">博盈國際會 · 台灣版整合管理</div>
+    <input type="email" id="login-email" placeholder="帳號（Email）" autocomplete="username">
+    <input type="password" id="login-pwd" placeholder="密碼" autocomplete="current-password" onkeydown="if(event.key==='Enter')handleLogin()">
+    <button id="login-btn" onclick="handleLogin()">進 入 系 統</button>
+  </div>
+</div>
+
+<!-- 首次設定精靈（偵測 users 為空時顯示） -->
+<div id="setup-overlay" style="display:none;">
+  <div class="login-box">
+    <div class="login-icon"><img class="brand-mark" src="icons/icon-192.png" width="96" height="96" alt="博盈APP" draggable="false" /></div>
+    <h1>首 次 設 定</h1>
+    <div class="login-sub">建立首位管理員帳號（需網路連線）</div>
+    <input type="text" id="setup-name" placeholder="姓名（顯示名稱）">
+    <input type="email" id="setup-email" placeholder="帳號（Email）" autocomplete="username">
+    <input type="password" id="setup-pwd" placeholder="密碼（至少 6 位）" autocomplete="new-password">
+    <input type="password" id="setup-pwd2" placeholder="再次輸入密碼" autocomplete="new-password">
+    <button id="setup-btn" onclick="handleSetup()">建 立 管 理 員 帳 號</button>
+  </div>
+</div>
+
+<!-- 主應用 -->
+<div id="app" style="display:none;">
+  <div class="sidebar">
+    <div class="sidebar-brand">
+      <div class="brand-icon"><img class="brand-mark" src="icons/icon-192.png" width="96" height="96" alt="博盈APP" draggable="false" /></div>
+      <div class="brand-title">博盈國際會</div>
+      <div class="brand-sub">台灣版 v1.0</div>
+    </div>
+    <ul class="nav-list" id="nav-list"></ul>
+  </div>
+  <div class="main-content">
+    <div class="topbar">
+      <h2 id="topbar-title">總覽</h2>
+      <div id="sync-status"></div>
+    </div>
+    <div id="page-overview" class="page-section active"></div>
+    <div id="page-pending" class="page-section"></div>
+    <div id="page-member" class="page-section"></div>
+    <div id="page-room" class="page-section"></div>
+    <div id="page-fees" class="page-section"></div>
+    <div id="page-profit" class="page-section"></div>
+    <div id="page-agent" class="page-section"></div>
+    <div id="page-shareholder" class="page-section"></div>
+    <div id="page-members-mgmt" class="page-section"></div>
+    <div id="page-history" class="page-section"></div>
+    <div id="page-reports" class="page-section"></div>
+    <div id="page-settings" class="page-section"></div>
+    <div id="page-audit-log" class="page-section"></div>
+  </div>
+</div>
+
+<!-- Modal -->
+<div id="modal-overlay">
+  <div class="modal-box">
+    <div class="modal-header">
+      <h3 id="modal-title"></h3>
+      <button class="modal-close" onclick="Modal.close()">×</button>
+    </div>
+    <div id="modal-body"></div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div id="toast-container" class="toast-container"></div>
+
+<script src="app.js?v=1787287830822"></script>
+</body>
+</html>
