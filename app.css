@@ -1763,3 +1763,113 @@ input, select, textarea { font-size: 16px; }
 .ios-a2hs-step .step-num { flex-shrink: 0; width: 22px; height: 22px; border-radius: var(--radius-full); background: var(--sheet-accent); color: var(--sheet-bg-deep); font-size: var(--font-size-xs); font-weight: bold; display: flex; align-items: center; justify-content: center; }
 .ios-a2hs-step img { vertical-align: middle; }
 .ios-a2hs-later { background: none; border: 1px solid var(--sheet-border); color: var(--sheet-text-muted); border-radius: var(--radius); padding: var(--spacing-sm) 20px; font-size: var(--font-size-sm); cursor: pointer; width: 100%; }
+/* ==========================================================================
+   v1.4.0 手機 App 式底部標籤列（取代原本擠成一排的縮圖導航）
+   主標籤：總覽 / 待結帳 / 帳務 / 房務 + 更多（其餘功能收入底部選單）
+   ========================================================================== */
+#app-tabbar { display: none; }
+
+@media (max-width: 768px) {
+  /* 舊的底部縮圖導航整組隱藏，改用 #app-tabbar */
+  .sidebar { display: none !important; }
+
+  #app-tabbar {
+    display: flex;
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    z-index: 900;
+    background: var(--bg-secondary, #fff);
+    border-top: 1px solid var(--border, #e5e5e5);
+    padding: 6px 6px calc(6px + env(safe-area-inset-bottom, 0px));
+    box-shadow: 0 -2px 12px rgba(0,0,0,0.12);
+  }
+
+  .tab-btn {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    background: none;
+    border: none;
+    color: var(--text-secondary, #777);
+    font: inherit;
+    min-height: 58px;
+    padding: 4px 2px;
+    border-radius: 12px;
+    -webkit-tap-highlight-color: transparent;
+    cursor: pointer;
+  }
+  .tab-btn .nav-icon { margin: 0; font-size: 0; }
+  .tab-btn .nav-icon svg { width: 26px; height: 26px; }
+  .tab-btn .nav-label { font-size: 11px; line-height: 1.2; white-space: nowrap; } /* 文字永遠顯示 */
+  .tab-btn.active { color: var(--accent, #c9a84c); background: var(--bg-hover, rgba(0,0,0,0.05)); }
+  .tab-btn:active { transform: scale(0.94); }
+
+  .main-content {
+    margin-left: 0 !important;
+    width: 100% !important;
+    margin-bottom: calc(78px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+}
+
+/* --- 「更多」底部選單（bottom sheet）--- */
+#more-sheet {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  z-index: 950;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+.more-mask {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.45);
+}
+.more-panel {
+  position: relative;
+  background: var(--bg-secondary, #fff);
+  border-radius: 18px 18px 0 0;
+  padding: 6px 14px calc(20px + env(safe-area-inset-bottom, 0px));
+  max-height: 72vh;
+  overflow-y: auto;
+  animation: moreUp 0.22s ease;
+}
+@keyframes moreUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+.more-grip {
+  width: 40px; height: 4px; border-radius: 2px;
+  background: var(--border, #ddd);
+  margin: 8px auto 4px;
+}
+.more-head {
+  text-align: center;
+  font-weight: 700;
+  font-size: 15px;
+  padding: 8px 0 4px;
+  color: var(--text-secondary, #777);
+}
+.more-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--border, #eee);
+  padding: 15px 8px;
+  font: inherit;
+  color: var(--text-primary, #222);
+  text-align: left;
+  -webkit-tap-highlight-color: transparent;
+  cursor: pointer;
+}
+.more-row:last-child { border-bottom: none; }
+.more-row:active { background: var(--bg-hover, rgba(0,0,0,0.05)); }
+.more-ic { font-size: 0; width: 32px; text-align: center; flex-shrink: 0; }
+.more-ic svg { width: 24px; height: 24px; }
+.more-tx { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.more-tx b { font-size: 16px; font-weight: 600; }
+.more-tx small { font-size: 12px; color: var(--text-secondary, #888); margin-top: 2px; }
+.more-ar { font-size: 22px; color: var(--text-secondary, #aaa); line-height: 1; }
