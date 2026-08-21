@@ -6,7 +6,7 @@
  *   - 其他 → stale-while-revalidate
  */
 
-var CACHE_VERSION = 'tw-app-v1.3.5';  // 2026-08-22 修正 needsSetup 本機殘留誤判（一律查雲端）；加 ?reset=1 清本機
+var CACHE_VERSION = 'tw-app-v1.3.6';  // 2026-08-22 修正手機頂部被狀態列擋住（safe-area-inset-top）+ ?reset=1 也清所有 caches 並延遲 reload
 var STATIC_CACHE = CACHE_VERSION + '-static';
 var RUNTIME_CACHE = CACHE_VERSION + '-runtime';
 
