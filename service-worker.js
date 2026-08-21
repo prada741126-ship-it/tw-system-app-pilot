@@ -6,7 +6,7 @@
  *   - 其他 → stale-while-revalidate
  */
 
-var CACHE_VERSION = 'tw-app-v1.2.0';  // 2026-08-21 修正 brand 圖示（簡化 SVG → 真實 3D PNG），bump 快取版強制重抓
+var CACHE_VERSION = 'tw-app-v1.3.0';  // 2026-08-21 改用使用者提供的完整構圖（龍+金幣+紅綢帶+博盈 3D 金字），移除 CSS 寫的標題文字
 var STATIC_CACHE = CACHE_VERSION + '-static';
 var RUNTIME_CACHE = CACHE_VERSION + '-runtime';
 

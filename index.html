@@ -18,16 +18,15 @@
 <link rel="apple-touch-startup-image" href="icons/splash-828x1792.png" media="(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 2)">
 <link rel="apple-touch-startup-image" href="icons/splash-750x1334.png" media="(device-width: 375px) and (device-height: 667px) and (-webkit-device-pixel-ratio: 2)">
 <title>台灣版整合系統</title>
-<link rel="stylesheet" href="app.css?v=1787287830822">
+<link rel="stylesheet" href="app.css?v=1787288276488">
 </head>
 <body>
 
 <!-- 登入畫面（Phase 1A 個別帳號） -->
 <div id="login-overlay">
   <div class="login-box">
-    <div class="login-icon"><img class="brand-mark" src="icons/icon-192.png" width="96" height="96" alt="博盈APP" draggable="false" /></div>
-    <h1>授 權 驗 證</h1>
-    <div class="login-sub">博盈國際會 · 台灣版整合管理</div>
+    <img class="brand-full" src="icons/brand-360.png" alt="博盈" draggable="false" />
+    <div class="login-sub">台灣版整合管理 · 授權登入</div>
     <input type="email" id="login-email" placeholder="帳號（Email）" autocomplete="username">
     <input type="password" id="login-pwd" placeholder="密碼" autocomplete="current-password" onkeydown="if(event.key==='Enter')handleLogin()">
     <button id="login-btn" onclick="handleLogin()">進 入 系 統</button>
@@ -37,9 +36,8 @@
 <!-- 首次設定精靈（偵測 users 為空時顯示） -->
 <div id="setup-overlay" style="display:none;">
   <div class="login-box">
-    <div class="login-icon"><img class="brand-mark" src="icons/icon-192.png" width="96" height="96" alt="博盈APP" draggable="false" /></div>
-    <h1>首 次 設 定</h1>
-    <div class="login-sub">建立首位管理員帳號（需網路連線）</div>
+    <img class="brand-full" src="icons/brand-360.png" alt="博盈" draggable="false" />
+    <div class="login-sub">台灣版整合管理 · 首次建立管理員帳號</div>
     <input type="text" id="setup-name" placeholder="姓名（顯示名稱）">
     <input type="email" id="setup-email" placeholder="帳號（Email）" autocomplete="username">
     <input type="password" id="setup-pwd" placeholder="密碼（至少 6 位）" autocomplete="new-password">
@@ -52,9 +50,8 @@
 <div id="app" style="display:none;">
   <div class="sidebar">
     <div class="sidebar-brand">
-      <div class="brand-icon"><img class="brand-mark" src="icons/icon-192.png" width="96" height="96" alt="博盈APP" draggable="false" /></div>
-      <div class="brand-title">博盈國際會</div>
-      <div class="brand-sub">台灣版 v1.0</div>
+      <img class="brand-full" src="icons/brand-240.png" alt="博盈" draggable="false" />
+    </div>
     </div>
     <ul class="nav-list" id="nav-list"></ul>
   </div>
@@ -93,6 +90,6 @@
 <!-- Toast -->
 <div id="toast-container" class="toast-container"></div>
 
-<script src="app.js?v=1787287830822"></script>
+<script src="app.js?v=1787288276488"></script>
 </body>
 </html>
