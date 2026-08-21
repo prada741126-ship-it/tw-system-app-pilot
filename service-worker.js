@@ -6,7 +6,7 @@
  *   - 其他 → stale-while-revalidate
  */
 
-var CACHE_VERSION = 'tw-app-v1.3.6';  // 2026-08-22 修正手機頂部被狀態列擋住（safe-area-inset-top）+ ?reset=1 也清所有 caches 並延遲 reload
+var CACHE_VERSION = 'tw-app-v1.4.0';  // 2026-08-22 手機 App 式底部標籤列（總覽/待結帳/帳務/房務+更多），修掉 480px 以下標籤文字被隱藏的問題
 var STATIC_CACHE = CACHE_VERSION + '-static';
 var RUNTIME_CACHE = CACHE_VERSION + '-runtime';
 
