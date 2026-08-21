@@ -11116,14 +11116,21 @@ function _boot() {
   // ?reset=1：清本機 + 強制重新偵測（用於雲端已重置但本機殘留導致流程卡住）
   if (/[?&]reset=1\b/.test(location.href)) {
     try { localStorage.clear(); } catch (e) {}
+    // 清掉所有 SW 與所有快取（含舊版 SW 持有的快取），確保 reload 拿到網路最新資源
     if (navigator.serviceWorker && navigator.serviceWorker.getRegistrations) {
       navigator.serviceWorker.getRegistrations().then(function(rs) {
         rs.forEach(function(r) { r.unregister(); });
       });
     }
+    if (window.caches && caches.keys) {
+      caches.keys().then(function(keys) {
+        keys.forEach(function(k) { caches.delete(k); });
+      });
+    }
     var qs = location.search.replace(/[?&]reset=1\b/, '').replace(/^&/, '?');
     history.replaceState(null, '', location.pathname + (qs || ''));
-    location.reload();
+    // 給 SW / caches 的清空動作一點時間，再 reload（避免 reload 又被舊 SW 接管）
+    setTimeout(function() { location.reload(); }, 300);
     return;
   }
   exposeGlobals();
