@@ -1073,8 +1073,16 @@ var Router = (function() {
     if (target) target.classList.add('active');
 
     document.querySelectorAll('.nav-item').forEach(function(el) { el.classList.remove('active'); });
-    var navEl = document.querySelector('[data-page="' + pageName + '"]');
-    if (navEl) navEl.classList.add('active');
+    // v1.4.0：同名 data-page 可能同時存在於側欄與手機標籤列，全部一起高亮
+    document.querySelectorAll('[data-page="' + pageName + '"]').forEach(function(el) { el.classList.add('active'); });
+
+    // v1.4.0：手機底部標籤列 — 次要頁面時高亮「更多」；切頁自動收起選單
+    if (typeof closeMoreSheet === 'function') closeMoreSheet();
+    var tabBar = document.getElementById('app-tabbar');
+    if (tabBar && !tabBar.querySelector('.tab-btn.active')) {
+      var moreBtn = tabBar.querySelector('[data-page="__more"]');
+      if (moreBtn) moreBtn.classList.add('active');
+    }
 
     EventBus.emit(EVENTS.PAGE_CHANGED, pageName);
 
@@ -4359,6 +4367,7 @@ var Icons = (function() {
     info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v5"/><circle cx="12" cy="8" r="0.5" fill="currentColor"/>',
     refresh: '<path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 3v5h-5"/>',
     filter: '<path d="M3 5h18l-7 8v6l-4-2v-4z"/>',
+    menu: '<path d="M4 6h16M4 12h16M4 18h16"/>',
     empty: '<rect x="4" y="7" width="16" height="13" rx="2"/><path d="M4 11h16"/><path d="M9 7l1.5-3h3L15 7"/>',
   };
 
@@ -12893,4 +12902,121 @@ var IosPWA = (function() {
   }
 })();
 // === Nav Init ===
-function renderNav(){var nav=document.getElementById("nav-list");if(!nav)return;nav.innerHTML="";PAGES.forEach(function(p){if(typeof Perm!=="undefined"&&Perm.hasSession()&&!Perm.can(p.name,"read"))return;var li=document.createElement("li");li.className="nav-item";li.setAttribute("data-page",p.name);var ic=(typeof Icons!=="undefined")?Icons.get(p.name,22):"";if(!ic)ic=p.icon;li.innerHTML='<span class="nav-icon">'+ic+'</span><span class="nav-label">'+p.label+'</span>';li.onclick=function(){Router.go(p.name);document.getElementById("topbar-title").textContent=p.label;};nav.appendChild(li);});}
+function renderNav(){var nav=document.getElementById("nav-list");if(!nav)return;nav.innerHTML="";PAGES.forEach(function(p){if(typeof Perm!=="undefined"&&Perm.hasSession()&&!Perm.can(p.name,"read"))return;var li=document.createElement("li");li.className="nav-item";li.setAttribute("data-page",p.name);var ic=(typeof Icons!=="undefined")?Icons.get(p.name,22):"";if(!ic)ic=p.icon;li.innerHTML='<span class="nav-icon">'+ic+'</span><span class="nav-label">'+p.label+'</span>';li.onclick=function(){Router.go(p.name);document.getElementById("topbar-title").textContent=p.label;};nav.appendChild(li);});renderMobileTabs();}
+
+// ============================================================================
+// v1.4.0 手機 App 式底部標籤列（4 主功能 + 更多選單，有圖示也有文字）
+// ============================================================================
+var MOBILE_TABS = ['overview', 'pending', 'member', 'room'];
+var MOBILE_TAB_DESC = {
+  overview:    '今日營運重點一覽',
+  pending:     '查看尚未結帳的客人',
+  member:      '會員積分與帳務作業',
+  room:        '房間狀態與排房',
+  shareholder: '股東佔比與分潤計算',
+  membersMgmt: '員工帳號與權限管理',
+  history:     '查詢歷史交易紀錄',
+  reports:     '匯出各式營運報表',
+  settings:    '系統與帳號設定'
+};
+
+function _pageIcon(name, size) {
+  var p = PAGES.find(function(x){ return x.name === name; });
+  var ic = (typeof Icons !== 'undefined') ? Icons.get(name, size) : '';
+  if (!ic && p) ic = p.icon;
+  return ic;
+}
+
+function renderMobileTabs() {
+  if (document.getElementById('app-tabbar')) return; // 已建過
+  var appEl = document.getElementById('app');
+  if (!appEl) return;
+
+  var visible = function(name) {
+    return !(typeof Perm !== 'undefined' && Perm.hasSession() && !Perm.can(name, 'read'));
+  };
+
+  var bar = document.createElement('div');
+  bar.id = 'app-tabbar';
+
+  MOBILE_TABS.forEach(function(name) {
+    var p = PAGES.find(function(x){ return x.name === name; });
+    if (!p || !visible(name)) return;
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'nav-item tab-btn';
+    b.setAttribute('data-page', name);
+    b.innerHTML = '<span class="nav-icon">' + _pageIcon(name, 26) + '</span>' +
+                  '<span class="nav-label">' + p.label + '</span>';
+    b.onclick = function() {
+      Router.go(name);
+      document.getElementById('topbar-title').textContent = p.label;
+    };
+    bar.appendChild(b);
+  });
+
+  // 「更多」按鈕
+  var more = document.createElement('button');
+  more.type = 'button';
+  more.className = 'nav-item tab-btn';
+  more.setAttribute('data-page', '__more');
+  more.innerHTML = '<span class="nav-icon">' + Icons.get('menu', 26) + '</span>' +
+                   '<span class="nav-label">更多</span>';
+  more.onclick = function() { openMoreSheet(); };
+  bar.appendChild(more);
+
+  appEl.appendChild(bar);
+
+  // 初始高亮目前頁面
+  var cur = Router.getCurrent();
+  var el = bar.querySelector('[data-page="' + cur + '"]');
+  if (el) el.classList.add('active');
+}
+
+function openMoreSheet() {
+  var existing = document.getElementById('more-sheet');
+  if (existing) { existing.remove(); return; }
+
+  var visible = function(name) {
+    return !(typeof Perm !== 'undefined' && Perm.hasSession() && !Perm.can(name, 'read'));
+  };
+
+  var rows = '';
+  PAGES.forEach(function(p) {
+    if (MOBILE_TABS.indexOf(p.name) >= 0) return; // 主標籤已在底列
+    if (!visible(p.name)) return;
+    rows += '<button class="more-row" data-page="' + p.name + '">' +
+              '<span class="more-ic">' + _pageIcon(p.name, 24) + '</span>' +
+              '<span class="more-tx"><b>' + p.label + '</b>' +
+              '<small>' + (MOBILE_TAB_DESC[p.name] || '') + '</small></span>' +
+              '<span class="more-ar">&#8250;</span>' +
+            '</button>';
+  });
+
+  var s = document.createElement('div');
+  s.id = 'more-sheet';
+  s.innerHTML =
+    '<div class="more-mask" id="more-mask"></div>' +
+    '<div class="more-panel">' +
+      '<div class="more-grip"></div>' +
+      '<div class="more-head">全部功能</div>' +
+      rows +
+    '</div>';
+  document.body.appendChild(s);
+
+  document.getElementById('more-mask').onclick = function() { closeMoreSheet(); };
+  s.querySelectorAll('.more-row').forEach(function(r) {
+    r.onclick = function() {
+      var name = r.getAttribute('data-page');
+      var p = PAGES.find(function(x){ return x.name === name; });
+      closeMoreSheet();
+      Router.go(name);
+      document.getElementById('topbar-title').textContent = p ? p.label : name;
+    };
+  });
+}
+
+function closeMoreSheet() {
+  var s = document.getElementById('more-sheet');
+  if (s) s.remove();
+}
