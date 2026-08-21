@@ -1,5 +1,5 @@
-// [BUILD] v1.0.0_dev_1787346879160
-window.TW_BUILD_VERSION = "v1.0.0_dev_1787346879160";
+// [BUILD] v1.0.0_dev_1787347514298
+window.TW_BUILD_VERSION = "v1.0.0_dev_1787347514298";
 
 // [DEV BUILD] 測試環境 — 資料導向 taiwan_data_dev/，不污染正式資料
 window.TW_DEV_MODE = true;
@@ -4291,12 +4291,12 @@ var Auth = (function() {
   async function logout() { await forceLogout(''); }
 
   function needsSetup() {
-    // 本機 users 為空 → 查雲端；兩者皆空 → 需要首次設定
-    if (Users.count() > 0) return Promise.resolve(false);
+    // 一律查雲端（本機有殘留也以雲端為準，避免誤判「已有管理員」）
     return _withTimeout(FirebaseSync.once(FB_PATH.USERS), 8000).then(function(remote) {
       return !remote || Object.keys(remote).length === 0;
     }).catch(function() {
-      return true; // 離線且本機無帳號 → 顯示設定畫面（提交時再要求連線）
+      // 雲端不可達且本機無帳號 → 顯示設定畫面（提交時再要求連線）
+      return Users.count() === 0;
     });
   }
 
@@ -11113,6 +11113,19 @@ async function handleSetup() {
 
 // 啟動（Phase 1A：資料先載入，Firebase 連線後分流 — session 還原 / 登入 / 首次設定）
 function _boot() {
+  // ?reset=1：清本機 + 強制重新偵測（用於雲端已重置但本機殘留導致流程卡住）
+  if (/[?&]reset=1\b/.test(location.href)) {
+    try { localStorage.clear(); } catch (e) {}
+    if (navigator.serviceWorker && navigator.serviceWorker.getRegistrations) {
+      navigator.serviceWorker.getRegistrations().then(function(rs) {
+        rs.forEach(function(r) { r.unregister(); });
+      });
+    }
+    var qs = location.search.replace(/[?&]reset=1\b/, '').replace(/^&/, '?');
+    history.replaceState(null, '', location.pathname + (qs || ''));
+    location.reload();
+    return;
+  }
   exposeGlobals();
   loadAllData();
   Keyboard.init();
