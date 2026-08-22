@@ -2138,3 +2138,8 @@ input, select, textarea { font-size: 16px; }
   .st-collapsible.st-collapsed .st-collapsible-body { overflow: hidden; }
   .st-collapsible-body .data-table { min-width: 520px; }
 }
+
+/* ==========================================================================
+   v1.9.4 帳務來源標籤（BOT 自動結帳）+ 洗碼手動輸入提示
+   ========================================================================== */
+.tx-source-tag { display: inline-block; padding: 1px 6px; border-radius: 8px; font-size: 11px; font-weight: 700; line-height: 1.5; color: #fff; background: var(--primary, #1a73e8); vertical-align: middle; margin-left: 4px; }
