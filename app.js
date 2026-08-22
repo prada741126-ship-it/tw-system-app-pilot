@@ -5539,9 +5539,9 @@ var OverviewPage = (function() {
     // 待结帐警示
     if (pendingTrips.length > 0) {
       html += '<div class="card alert-card">';
-      html += '<div class="card-header"><h3>待結帳</h3></div>';
+      html += '<div class="card-header"><h3>待結帳（已傳帳，待交收）</h3></div>';
       html += '<div class="table-wrapper"><table class="data-table"><thead><tr>';
-      html += '<th>團ID</th><th>股東</th><th>最後結帳</th><th>操作</th>';
+      html += '<th>團ID</th><th>股東</th><th>傳帳日</th><th>操作</th>';
       html += '</tr></thead><tbody>';
       pendingTrips.forEach(function(trip) {
         var sh = Shareholders.getById(trip.shareholderId);
@@ -5831,9 +5831,10 @@ var PendingPage = (function() {
     var trips = Trips.getAll().filter(function(t) { return t.status === TRIP_STATUS.PENDING_SETTLEMENT; });
     var html = '<div class="card">';
     html += '<div class="card-header"><h3>待結帳團列表</h3></div>';
+    html += '<p class="section-desc">會計在帳務頁「傳帳給上級」後，團會出現在這裡。與上級確認交收完成後，即可封存歸檔。</p>';
 
     if (trips.length === 0) {
-      html += Icons.empty('無待結帳的團', '所有團皆已結算封存');
+      html += Icons.empty('無待結帳的團', '帳務頁完成「傳帳給上級」後，團會出現在這裡');
     } else {
       trips.forEach(function(trip) {
         html += buildTripCard(trip);
@@ -5948,9 +5949,10 @@ var PendingPage = (function() {
     html += '<div class="mb-ap-stat"><label>訂房數</label><span>' + roomNights + ' 晚</span></div>';
     html += '<div class="mb-ap-stat"><label>會員數</label><span>' + memberCount + '</span></div>';
     html += '</div>';
-    // v1.9.0 分享明細（發給上級代理/股東）＋歸檔封存
-    html += '<button class="btn btn-primary" onclick="PendingPage.shareTrip(\'' + trip.id + '\')">分享明細</button>';
-    html += '<button class="btn btn-danger" onclick="PendingPage.sealTrip(\'' + trip.id + '\')">歸檔封存</button>';
+    // v1.9.3 流程對齊：傳帳已在帳務頁完成（進入待結帳時已分享），此處可重傳；
+    // 交收完成後才封存
+    html += '<button class="btn btn-primary" onclick="PendingPage.shareTrip(\'' + trip.id + '\')">重傳明細</button>';
+    html += '<button class="btn btn-danger" onclick="PendingPage.sealTrip(\'' + trip.id + '\')">交收完成 · 封存</button>';
     html += '</div>';
 
     html += '</div>'; // pd-card-body
@@ -6062,9 +6064,10 @@ var PendingPage = (function() {
     Modal.open('會員明細', html);
   }
 
-  // v1.9.0 分享團明細 — 作業流程最後一步：確認帳務無誤後發給上級代理/股東
-  // iOS：navigator.share 調出系統分享面板（可直接選微信）；不支援則複製到剪貼板
-  function shareTrip(tripId) {
+  // v1.9.3 正確流程：會員出完帳務明細 → 會計「傳帳給上級」= 送入待結帳（同時分享明細）
+  //            → 與上級交收完成 → 封存
+  // buildShareText：產生團結帳明細文字（供傳帳/重傳共用）
+  function buildShareText(tripId) {
     var trip = Trips.getById(tripId);
     if (!trip) { Toast.error('找不到團'); return; }
     var sh = Shareholders.getById(trip.shareholderId);
@@ -6127,7 +6130,15 @@ var PendingPage = (function() {
     }
     if (trip.notes) lines.push('備註: ' + trip.notes);
 
-    _shareText('團 ' + trip.id + ' 結帳明細', lines.join('\n'));
+    return lines.join('\n');
+  }
+
+  // 重傳明細（待結帳頁）：再次調出分享面板發給上級代理/股東
+  // iOS：navigator.share 調出系統分享面板（可直接選微信）；不支援則複製到剪貼板
+  function shareTrip(tripId) {
+    var text = buildShareText(tripId);
+    if (!text) return;
+    _shareText('團 ' + tripId + ' 結帳明細', text);
   }
 
   function _shareText(title, text) {
@@ -6158,14 +6169,14 @@ var PendingPage = (function() {
   }
 
   function sealTrip(tripId) {
-    Modal.confirm('封存後不可修改，確定要封存團 ' + tripId + '？', function() {
+    Modal.confirm('確認團 ' + tripId + ' 已與上級完成交收？\n封存後不可修改，將移入歷史查詢。', function() {
       Trips.sealTrip(tripId);
-      Toast.success('團 ' + tripId + ' 已封存');
+      Toast.success('團 ' + tripId + ' 已交收完成並封存');
       render();
     });
   }
 
-  return { render: render, sealTrip: sealTrip, toggleCard: toggleCard, showMemberDetail: showMemberDetail, shareTrip: shareTrip };
+  return { render: render, sealTrip: sealTrip, toggleCard: toggleCard, showMemberDetail: showMemberDetail, shareTrip: shareTrip, buildShareText: buildShareText, shareText: _shareText };
 })();
 
 
@@ -6242,10 +6253,10 @@ var MemberPage = (function() {
 
     if (_selectedTrip) {
       var trip = Trips.getById(_selectedTrip);
-      // v1.9.0 「送入待結帳」改為醒目大按鈕（原本擠在 header 小行，手機上難找難按）
+      // v1.9.3 流程對齊：會計「傳帳給上級」= 送入待結帳（同時調出分享面板發送明細）
       if (trip && trip.status === TRIP_STATUS.ACTIVE) {
         html += '<div class="mark-pending-bar">';
-        html += '<button class="btn btn-warning mark-pending-btn" onclick="MemberPage.markPending(\'' + _selectedTrip + '\')">收款完成 · 送入待結帳</button>';
+        html += '<button class="btn btn-warning mark-pending-btn" onclick="MemberPage.markPending(\'' + _selectedTrip + '\')">傳帳給上級 · 送入待結帳</button>';
         html += '</div>';
       }
       var mtxs = MemberTxs.getByTrip(_selectedTrip);
@@ -7021,12 +7032,16 @@ var MemberPage = (function() {
     });
   }
 
+  // v1.9.3 傳帳給上級＝送入待結帳：先送入待結帳（鎖定帳務），再調出分享面板把明細發給上級代理/股東
   function markPending(tripId) {
-    Modal.confirm('確定要將團 ' + tripId + ' 送入待結帳？\n送入後此團將無法再新增/修改帳務，需至「待結帳」頁面進行封存。', function() {
+    Modal.confirm('會產生結帳明細並分享給所屬上級（代理/股東），\n此團同時送入待結帳、無法再新增/修改帳務。\n確定要傳帳？', function() {
       Trips.update(tripId, { status: TRIP_STATUS.PENDING_SETTLEMENT, lastSettlementDate: TWDate.todayStr() });
-      Toast.success('團 ' + tripId + ' 已送入待結帳');
+      Toast.success('團 ' + tripId + ' 已傳帳並送入待結帳');
       _selectedTrip = null;
       render();
+      // 調出分享面板（iOS 可直接選微信發給上級；取消分享不影響待結帳狀態，之後可在待結帳頁重傳）
+      var text = (typeof PendingPage !== 'undefined') ? PendingPage.buildShareText(tripId) : null;
+      if (text) PendingPage.shareText('團 ' + tripId + ' 結帳明細', text);
     });
   }
 
