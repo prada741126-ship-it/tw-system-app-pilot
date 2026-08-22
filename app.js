@@ -4466,11 +4466,23 @@ var Toast = (function() {
     var t = document.createElement('div');
     t.className = 'toast toast-' + (type || 'info');
     t.textContent = msg;
-    container.appendChild(t);
-    setTimeout(function() {
+    // v1.7.0 點擊關閉 + error 常駐直到點擊
+    t.style.cursor = 'pointer';
+    var removed = false;
+    function remove() {
+      if (removed) return; removed = true;
       t.classList.add('toast-fade-out');
       setTimeout(function() { if (t.parentNode) t.parentNode.removeChild(t); }, 300);
-    }, duration || 3000);
+    }
+    t.addEventListener('click', remove);
+    container.appendChild(t);
+    // error 類需手動關閉，其他自動消失
+    if (type !== 'error') {
+      setTimeout(function() {
+        t.classList.add('toast-fade-out');
+        setTimeout(function() { if (t.parentNode) t.parentNode.removeChild(t); }, 300);
+      }, duration || 3000);
+    }
   }
   function info(msg) { show(msg, 'info'); }
   function success(msg) { show(msg, 'success'); }
@@ -5197,6 +5209,16 @@ var OverviewPage = (function() {
     }).length;
 
     var html = '';
+    // v1.7.0 快捷操作置頂（手機上第一眼就能直達常用功能）
+    html += '<div class="ov-quick-actions">';
+    html += '<div class="ov-qa-card ov-qa-primary" onclick="OverviewPage._quickAddTx()"><div class="ov-qa-icon">' + ICONS.chart + '</div><span>新增帳務</span></div>';
+    var pendingBadge = pendingTrips.length > 0 ? '<span class="ov-qa-badge">' + pendingTrips.length + '</span>' : '';
+    html += '<div class="ov-qa-card" onclick="Router.go(\'pending\')"><div class="ov-qa-icon">' + ICONS.warning + '</div><span>待結帳</span>' + pendingBadge + '</div>';
+    html += '<div class="ov-qa-card" onclick="Router.go(\'room\')"><div class="ov-qa-icon">' + ICONS.booking + '</div><span>訂房</span></div>';
+    html += '<div class="ov-qa-card" onclick="Router.go(\'member\')"><div class="ov-qa-icon">' + ICONS.member + '</div><span>會員查詢</span></div>';
+    html += '<div class="ov-qa-card" onclick="OverviewPage.showCreateTrip()"><div class="ov-qa-icon">' + ICONS.active + '</div><span>建團</span></div>';
+    html += '</div>';
+
     // KPI 卡片
     html += '<div class="kpi-grid">';
     html += kpiCard('進行中團', activeTrips.length, 'active', ICONS.active);
@@ -5338,15 +5360,6 @@ var OverviewPage = (function() {
     }
     html += '</div>';
 
-    // 快捷操作
-    html += '<div class="ov-quick-actions">';
-    html += '<div class="ov-qa-card" onclick="OverviewPage.showCreateTrip()"><div class="ov-qa-icon">' + ICONS.active + '</div><span>建團</span></div>';
-    html += '<div class="ov-qa-card" onclick="Router.go(\'membersMgmt\')"><div class="ov-qa-icon">' + ICONS.member + '</div><span>新增會員</span></div>';
-    html += '<div class="ov-qa-card" onclick="Router.go(\'member\')"><div class="ov-qa-icon">' + ICONS.chart + '</div><span>帳務</span></div>';
-    html += '<div class="ov-qa-card" onclick="Router.go(\'room\')"><div class="ov-qa-icon">' + ICONS.booking + '</div><span>訂房</span></div>';
-    html += '<div class="ov-qa-card" onclick="Router.go(\'shareholder\')"><div class="ov-qa-icon">' + ICONS.shareholder + '</div><span>股東分潤</span></div>';
-    html += '</div>';
-
     // 待结帐警示
     if (pendingTrips.length > 0) {
       html += '<div class="card alert-card">';
@@ -5377,7 +5390,9 @@ var OverviewPage = (function() {
 
   function formatNum(n) {
     if (n === 0) return '0';
-    return n.toFixed(2).replace(/\.?0+$/, '');
+    var v = Math.round(n * 1000) / 1000;
+    if (Math.abs(v - Math.round(v)) < 1e-6) return Math.round(v).toLocaleString();
+    return v.toLocaleString(undefined, { maximumFractionDigits: 3 });
   }
 
   function showCreateTrip() {
@@ -5545,6 +5560,21 @@ var OverviewPage = (function() {
     });
   }
 
+  // v1.7.0 快速新增帳務：跳到帳務頁並選最近活躍團
+  function _quickAddTx() {
+    var trips = Trips.getAll();
+    var active = trips.filter(function(t) { return t.status === TRIP_STATUS.ACTIVE; });
+    if (active.length === 0) {
+      Toast.warning('目前沒有進行中的團，請先建團');
+      Router.go('overview');
+      return;
+    }
+    var latest = active[active.length - 1];
+    Router.go('member');
+    window._selectedTrip = latest.id;
+    MemberPage.selectTrip(latest.id);
+  }
+
   // 帳務/團數據同步後自動刷新
   EventBus.on(EVENTS.MTX_LOADED, function() {
     if (Router.getCurrent() === 'overview') render();
@@ -5553,7 +5583,7 @@ var OverviewPage = (function() {
     if (Router.getCurrent() === 'overview') render();
   });
 
-  return { render: render, showCreateTrip: showCreateTrip, createTrip: createTrip, toggleAllMembers: toggleAllMembers, showEditTrip: showEditTrip, saveEditTrip: saveEditTrip, deleteTrip: deleteTrip, toggleAllMembersEdit: toggleAllMembersEdit };
+  return { render: render, showCreateTrip: showCreateTrip, createTrip: createTrip, toggleAllMembers: toggleAllMembers, showEditTrip: showEditTrip, saveEditTrip: saveEditTrip, deleteTrip: deleteTrip, toggleAllMembersEdit: toggleAllMembersEdit, _quickAddTx: _quickAddTx };
 
 })();
 
@@ -6027,6 +6057,7 @@ var MemberPage = (function() {
           html += '</div>';
           html += '<div class="mb-card-actions">';
           html += '<button class="btn-sm" onclick="MemberPage.editTx(\'' + tx.id + '\')">編輯</button>';
+          html += '<button class="btn-sm" onclick="MemberPage.copyTx(\'' + tx.id + '\')">複製</button>';
           html += '<button class="btn-sm btn-danger" onclick="MemberPage.delTx(\'' + tx.id + '\')">刪</button>';
           html += '</div>';
           html += '</div>';
@@ -6290,20 +6321,36 @@ var MemberPage = (function() {
     return html;
   }
 
-  function showAddTx() {
+  function showAddTx(prefillTx) {
     var trip = Trips.getById(_selectedTrip);
     if (!trip) return;
     var members = Members.getAll();
-    var defaultM = members.length > 0 ? members[0] : { rate1: 0, rebate1: 0, rate2: 0, rebate2: 0 };
+    // v1.7.0 預設帶入最近使用會員（而非 members[0]）
+    var recentIds = RecentMembers.getList();
+    var defaultM = null;
+    if (prefillTx && prefillTx.memberId) {
+      defaultM = Members.getById(prefillTx.memberId);
+    }
+    if (!defaultM && recentIds.length > 0) {
+      defaultM = Members.getById(recentIds[0]);
+    }
+    if (!defaultM && members.length > 0) {
+      defaultM = members[0];
+    }
+    if (!defaultM) defaultM = { rate1: 0, rebate1: 0, rate2: 0, rebate2: 0 };
+    var defaultMemberId = defaultM.id || '';
+
     var html = '';
+    // v1.7.0 會員搜尋選擇器（取代原生 select）
     html += '<div class="form-group"><label>會員</label>';
-    html += '<select id="tx-member" class="form-input" onchange="MemberPage.onMemberChange()">';
-    members.forEach(function(m) {
-      html += '<option value="' + m.id + '">' + m.id + ' ' + esc(m.name) + ' (倍率:' + m.rate1 + '/' + m.rate2 + ')</option>';
-    });
-    html += '</select></div>';
+    html += '<div class="member-picker" style="position:relative;">';
+    html += '<input type="hidden" id="tx-member" value="' + escAttr(defaultMemberId) + '">';
+    html += '<input type="text" id="tx-member-search" class="form-input" placeholder="搜尋會員（名字或編號）..." value="' + escAttr(defaultM.name || '') + ' (' + escAttr(defaultM.id || '') + ')"';
+    html += ' onfocus="MemberPage._onMemberSearchFocus()" oninput="MemberPage._onMemberSearchInput(this.value)" autocomplete="off">';
+    html += '<div id="tx-member-dropdown" class="member-picker-dropdown" style="display:none;"></div>';
+    html += '</div></div>';
     html += '<div class="form-group"><label>貴賓廳</label>';
-    var defaultHallId = (trip && trip.hallIds && trip.hallIds[0]) || '';
+    var defaultHallId = prefillTx ? (prefillTx.vipHallId || '') : ((trip && trip.hallIds && trip.hallIds[0]) || '');
     html += '<select id="tx-hall" class="form-input">';
     html += '<option value="">未選擇</option>';
     VIP_HALLS.forEach(function(h) {
@@ -6312,13 +6359,13 @@ var MemberPage = (function() {
     });
     html += '</select></div>';
     html += '<div class="form-row">';
-    html += '<div class="form-group"><label>出碼(CR)(萬)</label><input type="number" inputmode="decimal" step="0.001" id="tx-out" class="form-input" oninput="MemberPage.calcUpDown()"></div>';
-    html += '<div class="form-group"><label>回碼(寄碼)(萬)</label><input type="number" inputmode="decimal" step="0.001" id="tx-back" class="form-input" oninput="MemberPage.calcUpDown()"></div>';
+    html += '<div class="form-group"><label>出碼(CR)(萬)</label><input type="number" inputmode="decimal" step="0.001" id="tx-out" class="form-input" value="' + (prefillTx ? fmtNum(prefillTx.outCode || 0) : '') + '" oninput="MemberPage.calcUpDown()"></div>';
+    html += '<div class="form-group"><label>回碼(寄碼)(萬)</label><input type="number" inputmode="decimal" step="0.001" id="tx-back" class="form-input" value="' + (prefillTx ? fmtNum(prefillTx.backCode || 0) : '') + '" oninput="MemberPage.calcUpDown()"></div>';
     html += '</div>';
     html += '<div class="form-row">';
-    html += '<div class="form-group"><label>客上(萬)</label><input type="number" inputmode="decimal" step="0.001" id="tx-up" class="form-input" value="0" oninput="MemberPage.calcWash()"></div>';
-    html += '<div class="form-group"><label>客下(萬)</label><input type="number" inputmode="decimal" step="0.001" id="tx-down" class="form-input" value="0" oninput="MemberPage.calcWash()"></div>';
-    html += '<div class="form-group"><label>洗碼(萬)</label><input type="number" inputmode="decimal" step="0.001" id="tx-wash" class="form-input"></div>';
+    html += '<div class="form-group"><label>客上(萬)</label><input type="number" inputmode="decimal" step="0.001" id="tx-up" class="form-input" value="' + (prefillTx ? fmtNum(prefillTx.customerUp || 0) : '0') + '" oninput="MemberPage.calcWash()"></div>';
+    html += '<div class="form-group"><label>客下(萬)</label><input type="number" inputmode="decimal" step="0.001" id="tx-down" class="form-input" value="' + (prefillTx ? fmtNum(prefillTx.customerDown || 0) : '0') + '" oninput="MemberPage.calcWash()"></div>';
+    html += '<div class="form-group"><label>洗碼(萬)</label><input type="number" inputmode="decimal" step="0.001" id="tx-wash" class="form-input" value="' + (prefillTx ? fmtNum(prefillTx.washCode || 0) : '') + '"></div>';
     html += '</div>';
     html += '<div class="form-row">';
     html += '<div class="form-group"><label>倍率1</label><input type="number" inputmode="decimal" step="0.01" id="tx-rate1" class="form-input" value="' + (defaultM.rate1 || 0) + '"></div>';
@@ -6329,8 +6376,62 @@ var MemberPage = (function() {
     html += '<div id="tx-expenses"></div>';
     html += '<button class="btn-sm" onclick="MemberPage.addExpenseRow()">+ 開銷</button>';
     html += '<div class="row-actions">';
-    html += '<button class="btn btn-primary" onclick="MemberPage.saveTx()">儲存</button></div>';
+    html += '<button class="btn btn-primary" id="tx-save-btn" onclick="MemberPage.saveTx()">儲存</button></div>';
     Modal.open('新增帳務', html);
+    if (prefillTx && prefillTx.expenses) {
+      _expenseRows = prefillTx.expenses.map(function(e) { return Object.assign({}, e); });
+      renderExpenseRows();
+    }
+  }
+
+  // v1.7.0 會員搜尋選擇器
+  function _onMemberSearchFocus() {
+    _renderMemberDropdown('');
+  }
+  function _onMemberSearchInput(val) {
+    _renderMemberDropdown(val);
+  }
+  function _renderMemberDropdown(query) {
+    var dd = document.getElementById('tx-member-dropdown');
+    if (!dd) return;
+    var members = Members.getAll();
+    var q = (query || '').trim().toLowerCase();
+    var filtered = members.filter(function(m) {
+      if (!q) return true;
+      return (m.name || '').toLowerCase().indexOf(q) >= 0 || (m.id || '').toLowerCase().indexOf(q) >= 0;
+    });
+    // 最近使用的排前面
+    var recents = RecentMembers.getList();
+    filtered.sort(function(a, b) {
+      var ai = recents.indexOf(a.id), bi = recents.indexOf(b.id);
+      if (ai >= 0 && bi >= 0) return ai - bi;
+      if (ai >= 0) return -1;
+      if (bi >= 0) return 1;
+      return 0;
+    });
+    if (filtered.length === 0) {
+      dd.innerHTML = '<div class="member-picker-item member-picker-empty">找不到會員</div>';
+    } else {
+      dd.innerHTML = filtered.slice(0, 20).map(function(m) {
+        return '<div class="member-picker-item" onclick="MemberPage._selectMember(\'' + escJs(m.id) + '\')">'
+          + '<span class="member-picker-name">' + esc(m.name || '') + '</span>'
+          + '<span class="member-picker-id">' + esc(m.id) + '</span>'
+          + '<span class="member-picker-rate">倍率 ' + esc(m.rate1 + '/' + m.rate2) + '</span>'
+          + '</div>';
+      }).join('');
+    }
+    dd.style.display = 'block';
+  }
+  function _selectMember(memberId) {
+    var m = Members.getById(memberId);
+    if (!m) return;
+    var hidden = document.getElementById('tx-member');
+    var search = document.getElementById('tx-member-search');
+    var dd = document.getElementById('tx-member-dropdown');
+    if (hidden) hidden.value = memberId;
+    if (search) search.value = (m.name || '') + ' (' + (m.id || '') + ')';
+    if (dd) dd.style.display = 'none';
+    onMemberChange();
   }
 
   function onMemberChange() {
@@ -6478,11 +6579,17 @@ var MemberPage = (function() {
     renderExpenseRows();
   }
 
+  var _txSaving = false; // v1.7.0 防重複提交鎖
+
   function saveTx() {
+    if (_txSaving) return; // v1.7.0 防重複提交
+    _txSaving = true;
+    var btn = document.getElementById('tx-save-btn');
+    if (btn) { btn.disabled = true; btn.textContent = '儲存中...'; }
     var memberId = document.getElementById('tx-member').value;
     var m = Members.getById(memberId);
-    if (!m) { Toast.error('會員不存在'); return; }
-    if (m.status === MEMBER_STATUS.DRAFT) { Toast.error('會員資料未完成，無法結帳'); return; }
+    if (!m) { Toast.error('會員不存在'); _txSaving = false; if (btn) { btn.disabled = false; btn.textContent = '儲存'; } return; }
+    if (m.status === MEMBER_STATUS.DRAFT) { Toast.error('會員資料未完成，無法結帳'); _txSaving = false; if (btn) { btn.disabled = false; btn.textContent = '儲存'; } return; }
 
     var trip = Trips.getById(_selectedTrip);
     var data = {
@@ -6508,6 +6615,7 @@ var MemberPage = (function() {
     Trips.update(_selectedTrip, { lastSettlementDate: data.date });
     Modal.close();
     _expenseRows = [];
+    _txSaving = false; // v1.7.0 解鎖
     Toast.success('帳務已建立');
     render();
   }
@@ -6546,12 +6654,16 @@ var MemberPage = (function() {
     html += '<div id="tx-expenses"></div>';
     html += '<button class="btn-sm" onclick="MemberPage.addExpenseRow()">+ 開銷</button>';
     html += '<div class="row-actions">';
-    html += '<button class="btn btn-primary" onclick="MemberPage.saveEditTx(\'' + txId + '\')">儲存</button></div>';
+    html += '<button class="btn btn-primary" id="tx-edit-btn" onclick="MemberPage.saveEditTx(\'' + txId + '\')">儲存</button></div>';
     Modal.open('編輯帳務', html);
     renderExpenseRows();
   }
 
   function saveEditTx(txId) {
+    if (_txSaving) return; // v1.7.0 防重複提交
+    _txSaving = true;
+    var btn = document.getElementById('tx-edit-btn');
+    if (btn) { btn.disabled = true; btn.textContent = '儲存中...'; }
     var patch = {
       vipHallId: document.getElementById('tx-hall').value,
       date: document.getElementById('tx-date').value,
@@ -6569,6 +6681,7 @@ var MemberPage = (function() {
     MemberTxs.update(txId, patch);
     Modal.close();
     _expenseRows = [];
+    _txSaving = false; // v1.7.0 解鎖
     Toast.success('帳務已更新');
     render();
   }
@@ -6578,6 +6691,22 @@ var MemberPage = (function() {
       MemberTxs.remove(txId);
       Toast.success('已刪除');
       render();
+    });
+  }
+
+  // v1.7.0 複製上一筆帳務（預填所有欄位，同團同會員連續記帳）
+  function copyTx(txId) {
+    var tx = MemberTxs.getById(txId);
+    if (!tx) return;
+    showAddTx({
+      memberId: tx.memberId,
+      vipHallId: tx.vipHallId,
+      outCode: tx.outCode,
+      backCode: tx.backCode,
+      customerUp: tx.customerUp,
+      customerDown: tx.customerDown,
+      washCode: tx.washCode,
+      expenses: (tx.expenses || []).map(function(e) { return Object.assign({}, e); }),
     });
   }
 
@@ -6594,9 +6723,10 @@ var MemberPage = (function() {
     render: render, selectTrip: selectTrip, selectAgent: selectAgent, switchTab: switchTab,
     onMemberSearch: onMemberSearch, searchMember: searchMember,
     showAddTx: showAddTx, saveTx: saveTx, onMemberChange: onMemberChange, showAddAgent: showAddAgent, delAgent: delAgent,
-    editTx: editTx, saveEditTx: saveEditTx, delTx: delTx,
+    editTx: editTx, saveEditTx: saveEditTx, delTx: delTx, copyTx: copyTx,
     addExpenseRow: addExpenseRow, _updExp: _updExp, _updExpType: _updExpType, _delExp: _delExp,
     calcUpDown: calcUpDown, calcWash: calcWash,
+    _onMemberSearchFocus: _onMemberSearchFocus, _onMemberSearchInput: _onMemberSearchInput, _selectMember: _selectMember,
     markPending: markPending,
   };
 })();
@@ -6958,7 +7088,9 @@ var RoomPage = (function() {
   /* ===== Helper: 數字格式 ===== */
   function formatNum(n) {
     if (n === 0) return '0';
-    return n.toFixed(2).replace(/\.?0+$/, '');
+    var v = Math.round(n * 1000) / 1000;
+    if (Math.abs(v - Math.round(v)) < 1e-6) return Math.round(v).toLocaleString();
+    return v.toLocaleString(undefined, { maximumFractionDigits: 3 });
   }
 
   /* ===== Helper: HTML 轉義 ===== */
@@ -7087,7 +7219,7 @@ var RoomPage = (function() {
     html += '</select></div>';
 
     html += '<div class="row-actions">';
-    html += '<button class="btn btn-primary" onclick="RoomPage.saveBooking()">儲存</button></div>';
+    html += '<button class="btn btn-primary" id="bk-save-btn" onclick="RoomPage.saveBooking()">儲存</button></div>';
     Modal.open('新增訂房', html);
   }
 
@@ -7109,7 +7241,10 @@ var RoomPage = (function() {
     }).join('');
   }
 
+  var _bkSaving = false; // v1.7.0 防重複提交鎖
+
   function saveBooking() {
+    if (_bkSaving) return; // v1.7.0 防重複提交
     var trip = Trips.getById(_selectedTrip);
     if (!trip) return;
     var roomSelect = document.getElementById('bk-room');
@@ -7129,6 +7264,10 @@ var RoomPage = (function() {
     if (!checkIn || !checkOut) { Toast.error('請填入住日與退房日'); return; }
     if (checkOut <= checkIn) { Toast.error('退房日必須晚於入住日'); return; }
 
+    _bkSaving = true;
+    var btn = document.getElementById('bk-save-btn');
+    if (btn) { btn.disabled = true; btn.textContent = '儲存中...'; }
+
     Bookings.create({
       tripId: _selectedTrip,
       memberId: memberId,
@@ -7143,6 +7282,7 @@ var RoomPage = (function() {
       threshold: threshold,
     });
     Modal.close();
+    _bkSaving = false; // v1.7.0 解鎖
     Toast.success('訂房已建立');
     render();
   }
@@ -12963,9 +13103,78 @@ var IosPWA = (function() {
     }, { passive: false });
   }
 
+  // v1.7.0 下拉刷新
+  var _ptrStartY = 0, _ptrPulling = false, _ptrEl = null;
+  function setupPullToRefresh() {
+    var mc = document.querySelector('.main-content');
+    if (!mc) { setTimeout(setupPullToRefresh, 500); return; }
+    _ptrEl = document.createElement('div');
+    _ptrEl.id = 'ptr-indicator';
+    _ptrEl.innerHTML = '<span class="ptr-icon">↓</span><span class="ptr-text">下拉刷新</span>';
+    mc.parentElement.insertBefore(_ptrEl, mc);
+
+    mc.addEventListener('touchstart', function(e) {
+      if (mc.scrollTop === 0 && e.touches.length === 1) {
+        _ptrStartY = e.touches[0].clientY;
+        _ptrPulling = true;
+      }
+    }, { passive: true });
+
+    mc.addEventListener('touchmove', function(e) {
+      if (!_ptrPulling) return;
+      var dy = e.touches[0].clientY - _ptrStartY;
+      if (dy > 0 && mc.scrollTop === 0) {
+        if (dy > 10 && _ptrEl) {
+          _ptrEl.style.opacity = Math.min(dy / 70, 1);
+          _ptrEl.style.transform = 'translateY(' + Math.min(dy * 0.5, 50) + 'px)';
+          if (dy > 70) {
+            _ptrEl.querySelector('.ptr-icon').textContent = '⟳';
+            _ptrEl.querySelector('.ptr-text').textContent = '放開刷新';
+          } else {
+            _ptrEl.querySelector('.ptr-icon').textContent = '↓';
+            _ptrEl.querySelector('.ptr-text').textContent = '下拉刷新';
+          }
+        }
+      }
+    }, { passive: true });
+
+    mc.addEventListener('touchend', function(e) {
+      if (!_ptrPulling) return;
+      _ptrPulling = false;
+      var dy = (e.changedTouches[0] ? e.changedTouches[0].clientY : 0) - _ptrStartY;
+      if (dy > 70 && mc.scrollTop === 0) {
+        if (_ptrEl) {
+          _ptrEl.style.transform = 'translateY(50px)';
+          _ptrEl.querySelector('.ptr-icon').textContent = '⟳';
+          _ptrEl.querySelector('.ptr-text').textContent = '刷新中...';
+        }
+        if (typeof _resyncAll === 'function') {
+          _resyncAll().then(function() {
+            setTimeout(_ptrReset, 800);
+          }).catch(function() {
+            setTimeout(_ptrReset, 800);
+          });
+        } else {
+          setTimeout(_ptrReset, 500);
+        }
+      } else {
+        _ptrReset();
+      }
+    }, { passive: true });
+  }
+  function _ptrReset() {
+    if (_ptrEl) {
+      _ptrEl.style.transform = '';
+      _ptrEl.style.opacity = '';
+      _ptrEl.querySelector('.ptr-icon').textContent = '↓';
+      _ptrEl.querySelector('.ptr-text').textContent = '下拉刷新';
+    }
+  }
+
   function init() {
     applySafeArea();
     preventOverscroll();
+    setupPullToRefresh();
 
     // 登入畫面就顯示引導（延遲 1 秒避免遮擋啟動）
     setTimeout(showInstallGuide, 1000);
