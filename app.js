@@ -5847,6 +5847,8 @@ var MemberPage = (function() {
   var _selectedTrip = null;
   var _selectedAgent = null;
   var _activeSubTab = 'transactions'; // 'transactions' | 'agents'
+  var _memberSearch = '';             // v1.6.0 會員搜尋
+  var _memberSearchTimer = null;
 
   function render() {
     var container = document.getElementById('page-member');
@@ -5920,6 +5922,33 @@ var MemberPage = (function() {
           var effectiveAgentId = t.agentId || (trip ? trip.agentId : '');
           return effectiveAgentId === _selectedAgent;
         });
+      }
+      // v1.6.0 依會員搜尋（名字或編號，部分字即中）
+      if (_memberSearch) {
+        var mq = _memberSearch.toLowerCase();
+        mtxs = mtxs.filter(function(t) {
+          var m = Members.getById(t.memberId);
+          var hay = ((m ? (m.name || '') + ' ' + m.id : '') + ' ' + t.memberId).toLowerCase();
+          return hay.indexOf(mq) >= 0;
+        });
+      }
+
+      // v1.6.0 會員搜尋框 + 最近使用會員（手機快速過濾）
+      html += '<div class="rm-search-bar" style="margin-bottom:10px;">';
+      html += '<input type="text" id="mtx-search-input" class="form-input" placeholder="搜尋會員（名字或編號）..." value="' + escHtml(_memberSearch) + '" oninput="MemberPage.onMemberSearch(this.value)">';
+      html += '</div>';
+      if (!_memberSearch) {
+        var recents = RecentMembers.getList().map(function(rid) { return Members.getById(rid); }).filter(Boolean).slice(0, 6);
+        if (recents.length > 0) {
+          html += '<div class="recent-chips"><span class="recent-chips-label">最近：</span>';
+          recents.forEach(function(m) {
+            html += '<button class="chip-btn" onclick="MemberPage.searchMember(\'' + m.id + '\')">' + esc(m.name) + '</button>';
+          });
+          html += '</div>';
+        }
+      }
+      if (_memberSearch) {
+        html += '<div style="margin:-2px 0 10px;font-size:12px;color:var(--text-muted);">符合「' + escHtml(_memberSearch) + '」的帳務 ' + mtxs.length + ' 筆 <button class="chip-btn" style="padding:2px 10px;font-size:12px;" onclick="MemberPage.searchMember(\'\')">清除</button></div>';
       }
 
       html += '<div class="mb-dual-layout">';
@@ -6036,12 +6065,31 @@ var MemberPage = (function() {
   function selectTrip(tripId) {
     _selectedTrip = tripId || null;
     _selectedAgent = null;
+    _memberSearch = '';
     render();
   }
 
   function selectAgent(agentId) {
     _selectedAgent = agentId || null;
     render();
+  }
+
+  // v1.6.0 會員搜尋（300ms debounce，重繪後自動回焦）
+  function onMemberSearch(v) {
+    if (_memberSearchTimer) clearTimeout(_memberSearchTimer);
+    _memberSearchTimer = setTimeout(function() {
+      _memberSearch = (v || '').trim();
+      render();
+      var inp = document.getElementById('mtx-search-input');
+      if (inp) { inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); }
+    }, 300);
+  }
+
+  function searchMember(keyword) {
+    _memberSearch = (keyword || '').trim();
+    render();
+    var inp = document.getElementById('mtx-search-input');
+    if (inp) { inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); }
   }
 
   // 代理新增後自動刷新（若當前在帳務頁）
@@ -6264,19 +6312,19 @@ var MemberPage = (function() {
     });
     html += '</select></div>';
     html += '<div class="form-row">';
-    html += '<div class="form-group"><label>出碼(CR)(萬)</label><input type="number" step="0.001" id="tx-out" class="form-input" oninput="MemberPage.calcUpDown()"></div>';
-    html += '<div class="form-group"><label>回碼(寄碼)(萬)</label><input type="number" step="0.001" id="tx-back" class="form-input" oninput="MemberPage.calcUpDown()"></div>';
+    html += '<div class="form-group"><label>出碼(CR)(萬)</label><input type="number" inputmode="decimal" step="0.001" id="tx-out" class="form-input" oninput="MemberPage.calcUpDown()"></div>';
+    html += '<div class="form-group"><label>回碼(寄碼)(萬)</label><input type="number" inputmode="decimal" step="0.001" id="tx-back" class="form-input" oninput="MemberPage.calcUpDown()"></div>';
     html += '</div>';
     html += '<div class="form-row">';
-    html += '<div class="form-group"><label>客上(萬)</label><input type="number" step="0.001" id="tx-up" class="form-input" value="0" oninput="MemberPage.calcWash()"></div>';
-    html += '<div class="form-group"><label>客下(萬)</label><input type="number" step="0.001" id="tx-down" class="form-input" value="0" oninput="MemberPage.calcWash()"></div>';
-    html += '<div class="form-group"><label>洗碼(萬)</label><input type="number" step="0.001" id="tx-wash" class="form-input"></div>';
+    html += '<div class="form-group"><label>客上(萬)</label><input type="number" inputmode="decimal" step="0.001" id="tx-up" class="form-input" value="0" oninput="MemberPage.calcWash()"></div>';
+    html += '<div class="form-group"><label>客下(萬)</label><input type="number" inputmode="decimal" step="0.001" id="tx-down" class="form-input" value="0" oninput="MemberPage.calcWash()"></div>';
+    html += '<div class="form-group"><label>洗碼(萬)</label><input type="number" inputmode="decimal" step="0.001" id="tx-wash" class="form-input"></div>';
     html += '</div>';
     html += '<div class="form-row">';
-    html += '<div class="form-group"><label>倍率1</label><input type="number" step="0.01" id="tx-rate1" class="form-input" value="' + (defaultM.rate1 || 0) + '"></div>';
-    html += '<div class="form-group"><label>返水1</label><input type="number" step="0.001" id="tx-rebate1" class="form-input" value="' + (defaultM.rebate1 || 0) + '"></div>';
-    html += '<div class="form-group"><label>倍率2</label><input type="number" step="0.01" id="tx-rate2" class="form-input" value="' + (defaultM.rate2 || 0) + '"></div>';
-    html += '<div class="form-group"><label>返水2</label><input type="number" step="0.001" id="tx-rebate2" class="form-input" value="' + (defaultM.rebate2 || 0) + '"></div>';
+    html += '<div class="form-group"><label>倍率1</label><input type="number" inputmode="decimal" step="0.01" id="tx-rate1" class="form-input" value="' + (defaultM.rate1 || 0) + '"></div>';
+    html += '<div class="form-group"><label>返水1</label><input type="number" inputmode="decimal" step="0.001" id="tx-rebate1" class="form-input" value="' + (defaultM.rebate1 || 0) + '"></div>';
+    html += '<div class="form-group"><label>倍率2</label><input type="number" inputmode="decimal" step="0.01" id="tx-rate2" class="form-input" value="' + (defaultM.rate2 || 0) + '"></div>';
+    html += '<div class="form-group"><label>返水2</label><input type="number" inputmode="decimal" step="0.001" id="tx-rebate2" class="form-input" value="' + (defaultM.rebate2 || 0) + '"></div>';
     html += '</div>';
     html += '<div id="tx-expenses"></div>';
     html += '<button class="btn-sm" onclick="MemberPage.addExpenseRow()">+ 開銷</button>';
@@ -6289,6 +6337,7 @@ var MemberPage = (function() {
     var memberId = document.getElementById('tx-member').value;
     var m = Members.getById(memberId);
     if (!m) return;
+    if (RecentMembers) RecentMembers.push(memberId); // v1.6.0 記住最近使用會員
     var r1 = document.getElementById('tx-rate1'); if (r1) r1.value = m.rate1 || 0;
     var rb1 = document.getElementById('tx-rebate1'); if (rb1) rb1.value = m.rebate1 || 0;
     var r2 = document.getElementById('tx-rate2'); if (r2) r2.value = m.rate2 || 0;
@@ -6480,19 +6529,19 @@ var MemberPage = (function() {
     html += '<div class="form-group"><label>日期</label>';
     html += '<input type="date" id="tx-date" class="form-input" value="' + (tx.date || '') + '"></div>';
     html += '<div class="form-row">';
-    html += '<div class="form-group"><label>出碼(CR)(萬)</label><input type="number" step="0.001" id="tx-out" class="form-input" value="' + fmtNum(tx.outCode || 0) + '" oninput="MemberPage.calcUpDown()"></div>';
-    html += '<div class="form-group"><label>回碼(寄碼)(萬)</label><input type="number" step="0.001" id="tx-back" class="form-input" value="' + fmtNum(tx.backCode || 0) + '" oninput="MemberPage.calcUpDown()"></div>';
+    html += '<div class="form-group"><label>出碼(CR)(萬)</label><input type="number" inputmode="decimal" step="0.001" id="tx-out" class="form-input" value="' + fmtNum(tx.outCode || 0) + '" oninput="MemberPage.calcUpDown()"></div>';
+    html += '<div class="form-group"><label>回碼(寄碼)(萬)</label><input type="number" inputmode="decimal" step="0.001" id="tx-back" class="form-input" value="' + fmtNum(tx.backCode || 0) + '" oninput="MemberPage.calcUpDown()"></div>';
     html += '</div>';
     html += '<div class="form-row">';
-    html += '<div class="form-group"><label>客上(萬)</label><input type="number" step="0.001" id="tx-up" class="form-input" value="' + fmtNum(tx.customerUp || 0) + '" oninput="MemberPage.calcWash()"></div>';
-    html += '<div class="form-group"><label>客下(萬)</label><input type="number" step="0.001" id="tx-down" class="form-input" value="' + fmtNum(tx.customerDown || 0) + '" oninput="MemberPage.calcWash()"></div>';
-    html += '<div class="form-group"><label>洗碼(萬)</label><input type="number" step="0.001" id="tx-wash" class="form-input" value="' + fmtNum(tx.washCode || 0) + '"></div>';
+    html += '<div class="form-group"><label>客上(萬)</label><input type="number" inputmode="decimal" step="0.001" id="tx-up" class="form-input" value="' + fmtNum(tx.customerUp || 0) + '" oninput="MemberPage.calcWash()"></div>';
+    html += '<div class="form-group"><label>客下(萬)</label><input type="number" inputmode="decimal" step="0.001" id="tx-down" class="form-input" value="' + fmtNum(tx.customerDown || 0) + '" oninput="MemberPage.calcWash()"></div>';
+    html += '<div class="form-group"><label>洗碼(萬)</label><input type="number" inputmode="decimal" step="0.001" id="tx-wash" class="form-input" value="' + fmtNum(tx.washCode || 0) + '"></div>';
     html += '</div>';
     html += '<div class="form-row">';
-    html += '<div class="form-group"><label>倍率1</label><input type="number" step="0.01" id="tx-rate1" class="form-input" value="' + (tx.rate1 || 0) + '"></div>';
-    html += '<div class="form-group"><label>返水1</label><input type="number" step="0.001" id="tx-rebate1" class="form-input" value="' + (tx.rebate1 || 0) + '"></div>';
-    html += '<div class="form-group"><label>倍率2</label><input type="number" step="0.01" id="tx-rate2" class="form-input" value="' + (tx.rate2 || 0) + '"></div>';
-    html += '<div class="form-group"><label>返水2</label><input type="number" step="0.001" id="tx-rebate2" class="form-input" value="' + (tx.rebate2 || 0) + '"></div>';
+    html += '<div class="form-group"><label>倍率1</label><input type="number" inputmode="decimal" step="0.01" id="tx-rate1" class="form-input" value="' + (tx.rate1 || 0) + '"></div>';
+    html += '<div class="form-group"><label>返水1</label><input type="number" inputmode="decimal" step="0.001" id="tx-rebate1" class="form-input" value="' + (tx.rebate1 || 0) + '"></div>';
+    html += '<div class="form-group"><label>倍率2</label><input type="number" inputmode="decimal" step="0.01" id="tx-rate2" class="form-input" value="' + (tx.rate2 || 0) + '"></div>';
+    html += '<div class="form-group"><label>返水2</label><input type="number" inputmode="decimal" step="0.001" id="tx-rebate2" class="form-input" value="' + (tx.rebate2 || 0) + '"></div>';
     html += '</div>';
     html += '<div id="tx-expenses"></div>';
     html += '<button class="btn-sm" onclick="MemberPage.addExpenseRow()">+ 開銷</button>';
@@ -6543,6 +6592,7 @@ var MemberPage = (function() {
 
   return {
     render: render, selectTrip: selectTrip, selectAgent: selectAgent, switchTab: switchTab,
+    onMemberSearch: onMemberSearch, searchMember: searchMember,
     showAddTx: showAddTx, saveTx: saveTx, onMemberChange: onMemberChange, showAddAgent: showAddAgent, delAgent: delAgent,
     editTx: editTx, saveEditTx: saveEditTx, delTx: delTx,
     addExpenseRow: addExpenseRow, _updExp: _updExp, _updExpType: _updExpType, _delExp: _delExp,
@@ -6713,7 +6763,33 @@ var RoomPage = (function() {
     if (pageItems.length === 0) {
       html += Icons.empty('無訂房記錄', '點擊「新增訂房」為會員建立訂房');
     } else {
-      html += '<div class="table-wrapper"><table class="data-table rm-table"><thead><tr>';
+      /* v1.6.0 手機卡片式列表（桌面上仍顯示表格） */
+      html += '<div class="m-cards">';
+      pageItems.forEach(function(b) {
+        var agent = Agents.getById(b.agentId);
+        var member = Members.getById(b.memberId);
+        html += '<div class="m-card">';
+        html += '<div class="m-card-head"><span class="m-card-title">' + escHtml(b.guestName || '(未填客人)') + '</span><span>' + statusCell(b) + ' ' + feeBadge(b) + '</span></div>';
+        html += '<div class="m-card-grid">';
+        html += '<div><div class="k">代理</div><div class="v">' + escHtml(agent ? agent.name : (b.agentId || '-')) + '</div></div>';
+        html += '<div><div class="k">會員</div><div class="v">' + (member ? escHtml(member.name) : '<span style="color:var(--text-muted)">純住宿</span>') + '</div></div>';
+        html += '<div class="full"><div class="k">酒店 / 房型</div><div class="v">' + escHtml((b.hotel || '-') + (b.roomType ? ' · ' + b.roomType : '')) + '</div></div>';
+        html += '<div class="full"><div class="k">日期</div><div class="v">' + escHtml(b.checkIn || '?') + ' → ' + escHtml(b.checkOut || '?') + '（' + (b.nights || 1) + ' 晚）</div></div>';
+        html += '<div><div class="k">每晚門檻</div><div class="v">' + ((b.threshold || 0) / 10000).toFixed(0) + ' 萬</div></div>';
+        html += '<div><div class="k">確認號</div><div class="v">' + escHtml(b.confirmNo || '-') + '</div></div>';
+        html += '</div>';
+        html += '<div class="m-card-actions">';
+        if (!b.memberId) {
+          html += '<button class="btn-sm" style="background:var(--accent);color:#fff;" onclick="RoomPage.linkMember(\'' + b.id + '\')">關聯會員</button>';
+        }
+        html += '<button class="btn-sm" onclick="RoomPage.editBooking(\'' + b.id + '\')">編輯</button>';
+        html += '<button class="btn-sm btn-danger" onclick="RoomPage.delBooking(\'' + b.id + '\')">刪除</button>';
+        html += '</div>';
+        html += '</div>';
+      });
+      html += '</div>';
+
+      html += '<div class="table-wrapper m-only-table"><table class="data-table rm-table"><thead><tr>';
       html += sortTH('客人', 'guestName');
       html += '<th>會員</th>';
       html += '<th>代理</th>';
@@ -7000,9 +7076,9 @@ var RoomPage = (function() {
     html += '</div>';
 
     html += '<div class="form-row">';
-    html += '<div class="form-group"><label>入住日</label><input type="date" id="bk-checkin" class="form-input"></div>';
-    html += '<div class="form-group"><label>退房日</label><input type="date" id="bk-checkout" class="form-input"></div>';
-    html += '<div class="form-group"><label>確認號</label><input type="text" id="bk-confirm" class="form-input"></div>';
+    html += '<div class="form-group"><label>入住日</label><input type="date" id="bk-checkin" class="form-input" value="' + localYmd(0) + '"></div>';
+    html += '<div class="form-group"><label>退房日</label><input type="date" id="bk-checkout" class="form-input" value="' + localYmd(1) + '"></div>';
+    html += '<div class="form-group"><label>確認號</label><input type="text" id="bk-confirm" class="form-input" placeholder="選填"></div>';
     html += '</div>';
 
     html += '<div class="form-group"><label>關聯會員(可選)</label>';
@@ -7044,16 +7120,25 @@ var RoomPage = (function() {
     var agent = Agents.getById(agentId);
     var memberId = document.getElementById('bk-member').value || null;
 
+    /* v1.6.0 必填驗證（避免存入空資料） */
+    var guestName = (document.getElementById('bk-guest').value || '').trim();
+    var checkIn = document.getElementById('bk-checkin').value;
+    var checkOut = document.getElementById('bk-checkout').value;
+    if (!guestName) { Toast.error('請填客人姓名'); return; }
+    if (!roomSelect.value) { Toast.error('請選擇體系 → 酒店 → 房型'); return; }
+    if (!checkIn || !checkOut) { Toast.error('請填入住日與退房日'); return; }
+    if (checkOut <= checkIn) { Toast.error('退房日必須晚於入住日'); return; }
+
     Bookings.create({
       tripId: _selectedTrip,
       memberId: memberId,
-      guestName: document.getElementById('bk-guest').value,
+      guestName: guestName,
       agentId: agentId,
       shareholderId: agent ? agent.shareholderId : trip.shareholderId,
       hotel: document.getElementById('bk-hotel').value,
       roomType: roomSelect.options[roomSelect.selectedIndex] ? roomSelect.options[roomSelect.selectedIndex].text.split(' (')[0] : '',
-      checkIn: document.getElementById('bk-checkin').value,
-      checkOut: document.getElementById('bk-checkout').value,
+      checkIn: checkIn,
+      checkOut: checkOut,
       confirmNo: document.getElementById('bk-confirm').value,
       threshold: threshold,
     });
@@ -7088,7 +7173,7 @@ var RoomPage = (function() {
       html += '<option value="' + f + '"' + (b.feeType === f ? ' selected' : '') + '>' + (FEE_LABELS[f] || f) + '</option>';
     });
     html += '</select></div>';
-    html += '<div class="form-group"><label>向客人收</label><input type="number" id="eb-charge-guest" class="form-input" value="' + (b.chargeGuest || 0) + '"></div>';
+    html += '<div class="form-group"><label>向客人收</label><input type="number" inputmode="decimal" id="eb-charge-guest" class="form-input" value="' + (b.chargeGuest || 0) + '"></div>';
     html += '</div>';
     html += '<div class="form-row">';
     html += '<div class="form-group"><label>入住日</label><input type="date" id="eb-checkin" class="form-input" value="' + (b.checkIn || '').slice(0, 10) + '"></div>';
@@ -7701,7 +7786,38 @@ var FeesPage = (function() {
     if (pageItems.length === 0) {
       html += Icons.empty('無訂房記錄', '點擊「新增訂房」為會員建立訂房');
     } else {
-      html += '<div class="table-wrapper"><table class="data-table" id="fees-table"><thead><tr>';
+      /* v1.6.0 手機卡片式列表（桌面上仍顯示表格） */
+      html += '<div class="m-cards">';
+      pageItems.forEach(function(b) {
+        var d = calcData[b.id];
+        var agent = Agents.getById(b.agentId);
+        var member = Members.getById(b.memberId);
+        var th = b.threshold || 0;
+        var n = b.nights || 1;
+        var ft = b.feeType || 'auto';
+        var ftLabel = { auto: '自動', free: '免費', paid: '收費' }[ft] || '自動';
+        var ftColor = { auto: 'var(--info)', free: 'var(--success)', paid: 'var(--danger)' }[ft] || 'var(--info)';
+        html += '<div class="m-card">';
+        html += '<div class="m-card-head"><span class="m-card-title">' + escHtml(b.guestName || '(未填客人)') + '</span>';
+        html += '<span class="badge" style="background:' + ftColor + ';color:#fff;cursor:pointer;user-select:none;" onclick="FeesPage.toggleFeeType(\'' + b.id + '\')" title="點擊切換費用類型">' + ftLabel + '</span></div>';
+        html += '<div class="m-card-grid">';
+        html += '<div><div class="k">會員</div><div class="v">' + (member ? escHtml(member.name) : '-') + '</div></div>';
+        html += '<div><div class="k">代理</div><div class="v">' + escHtml(agent ? agent.name : (b.agentId || '-')) + '</div></div>';
+        html += '<div class="full"><div class="k">酒店 / 房型</div><div class="v">' + escHtml((b.hotel || '-') + (b.roomType ? ' · ' + b.roomType : '')) + '</div></div>';
+        html += '<div class="full"><div class="k">日期</div><div class="v">' + escHtml(b.checkIn || '?') + ' → ' + escHtml(b.checkOut || '?') + '（' + n + ' 晚）</div></div>';
+        html += '<div><div class="k">門檻/總門檻</div><div class="v">' + (th / 10000).toFixed(0) + ' / ' + (th * n / 10000).toFixed(0) + ' 萬</div></div>';
+        html += '<div><div class="k">會員洗碼</div><div class="v">' + (memberWash[b.memberId] || 0).toFixed(2) + ' 萬</div></div>';
+        html += '<div><div class="k">折抵 / 剩餘</div><div class="v">' + d.discount + ' / ' + (d.remaining <= 0 ? '<span style="color:var(--success)">達標</span>' : '<span style="color:var(--danger)">' + d.remaining + ' 天</span>') + '</div></div>';
+        html += '<div class="full"><div class="k">向客人收（元）</div><div class="v"><input type="number" inputmode="decimal" min="0" value="' + (b.chargeGuest || d.charge || 0) + '" onchange="FeesPage.updateCharge(\'' + b.id + '\', this.value)" style="width:110px;text-align:right;padding:6px 8px;font-size:15px;border:1px solid var(--border);border-radius:8px;background:var(--bg-primary);color:var(--text-primary);"></div></div>';
+        html += '</div>';
+        html += '<div class="m-card-actions">';
+        html += '<button class="btn-sm" onclick="FeesPage.editBooking(\'' + b.id + '\')">編輯</button>';
+        html += '</div>';
+        html += '</div>';
+      });
+      html += '</div>';
+
+      html += '<div class="table-wrapper m-only-table"><table class="data-table" id="fees-table"><thead><tr>';
       html += sortTH('客人', 'guestName');
       html += '<th>會員</th>';
       html += '<th>代理</th>';
@@ -7750,7 +7866,7 @@ var FeesPage = (function() {
         html += '<td>';
         html += '<span class="badge" style="background:' + ftColor + ';color:#fff;cursor:pointer;user-select:none;" onclick="FeesPage.toggleFeeType(\'' + b.id + '\')" title="點擊切換費用類型">' + ftLabel + '</span>';
         html += '</td>';
-        html += '<td class="num"><input type="number" min="0" value="' + (b.chargeGuest || d.charge || 0) + '" onchange="FeesPage.updateCharge(\'' + b.id + '\', this.value)" style="width:70px;text-align:right;padding:2px 4px;font-size:var(--font-size-sm);border:1px solid var(--border);border-radius:var(--radius);background:var(--bg-primary);color:var(--text-primary);"></td>';
+        html += '<td class="num"><input type="number" inputmode="decimal" min="0" value="' + (b.chargeGuest || d.charge || 0) + '" onchange="FeesPage.updateCharge(\'' + b.id + '\', this.value)" style="width:70px;text-align:right;padding:2px 4px;font-size:var(--font-size-sm);border:1px solid var(--border);border-radius:var(--radius);background:var(--bg-primary);color:var(--text-primary);"></td>';
         html += '<td><button class="btn-sm" onclick="FeesPage.editBooking(\'' + b.id + '\')">編輯</button></td>';
         html += '</tr>';
       });
@@ -9306,7 +9422,30 @@ var MembersMgmtPage = (function() {
     html += '</select>';
     html += '</div>';
 
-    html += '<table class="data-table"><thead><tr>';
+    /* v1.6.0 手機卡片式列表（桌面上仍顯示表格） */
+    html += '<div class="m-cards">';
+    members.forEach(function(m) {
+      var agent = Agents.getById(m.agentId);
+      var sh = Shareholders.getById(m.shareholderId);
+      html += '<div class="m-card" data-sh="' + m.shareholderId + '" data-agent="' + m.agentId + '" data-status="' + m.status + '">';
+      html += '<div class="m-card-head"><span class="m-card-title">' + esc(m.name || '(未命名)') + '</span><span>' + (m.status === 'complete' ? '✅ 已完成' : '📝 草稿') + '</span></div>';
+      html += '<div class="m-card-grid">';
+      html += '<div><div class="k">會員ID</div><div class="v">' + esc(m.id) + '</div></div>';
+      html += '<div><div class="k">賭場編號</div><div class="v">' + esc(m.casinoId || '-') + '</div></div>';
+      html += '<div><div class="k">代理</div><div class="v">' + esc(agent ? agent.name : (m.agentId || '-')) + '</div></div>';
+      html += '<div><div class="k">股東</div><div class="v">' + esc(sh ? sh.name : (m.shareholderId || '-')) + '</div></div>';
+      html += '<div><div class="k">倍率 / 返水 1</div><div class="v">' + (m.rate1 || 0) + ' / ' + (m.rebate1 || 0) + '</div></div>';
+      html += '<div><div class="k">倍率 / 返水 2</div><div class="v">' + (m.rate2 || 0) + ' / ' + (m.rebate2 || 0) + '</div></div>';
+      html += '</div>';
+      html += '<div class="m-card-actions">';
+      html += '<button class="btn-sm" onclick="MembersMgmtPage.editMember(\'' + m.id + '\')">編輯</button>';
+      html += '<button class="btn-sm btn-danger" onclick="MembersMgmtPage.delMember(\'' + m.id + '\')">刪除</button>';
+      html += '</div>';
+      html += '</div>';
+    });
+    html += '</div>';
+
+    html += '<div class="table-wrapper m-only-table"><table class="data-table"><thead><tr>';
     html += '<th>會員ID</th><th>客稱</th><th>賭場編號</th><th>代理</th><th>股東</th>';
     html += '<th>倍率1</th><th>返水1</th><th>倍率2</th><th>返水2</th><th>狀態</th><th>操作</th>';
     html += '</tr></thead><tbody>';
@@ -9330,7 +9469,7 @@ var MembersMgmtPage = (function() {
       html += '</tr>';
     });
 
-    html += '</tbody></table></div>';
+    html += '</tbody></table></div></div>';
     var container = document.getElementById('page-members-mgmt');
     if (container) container.innerHTML = html;
   }
@@ -9340,7 +9479,7 @@ var MembersMgmtPage = (function() {
     var agentFilter = document.getElementById('mgmt-agent-filter').value;
     var statusFilter = document.getElementById('mgmt-status-filter').value;
 
-    document.querySelectorAll('#page-members-mgmt tbody tr').forEach(function(row) {
+    document.querySelectorAll('#page-members-mgmt tbody tr, #page-members-mgmt .m-card').forEach(function(row) {
       var show = true;
       if (shFilter && row.getAttribute('data-sh') !== shFilter) show = false;
       if (agentFilter && row.getAttribute('data-agent') !== agentFilter) show = false;
@@ -13020,4 +13159,39 @@ function openMoreSheet() {
 function closeMoreSheet() {
   var s = document.getElementById('more-sheet');
   if (s) s.remove();
+}
+
+/* ==========================================================================
+   v1.6.0 手機操作體驗優化 — 共用工具
+   ========================================================================== */
+// 是否手機視角（寬表格 ↔ 卡片式切換判斷）
+function isMobileView() {
+  return !!(window.matchMedia && window.matchMedia('(max-width: 768px)').matches);
+}
+
+// 最近使用會員（帳務頁快速過濾用）
+var RecentMembers = (function() {
+  var KEY = 'recentMemberIds_v1';
+  function getList() {
+    try {
+      var v = JSON.parse(localStorage.getItem(KEY) || '[]');
+      return Array.isArray(v) ? v : [];
+    } catch (e) { return []; }
+  }
+  function push(memberId) {
+    if (!memberId) return;
+    var list = getList().filter(function(id) { return id !== memberId; });
+    list.unshift(memberId);
+    try { localStorage.setItem(KEY, JSON.stringify(list.slice(0, 8))); } catch (e) {}
+  }
+  return { getList: getList, push: push };
+})();
+
+// 本機日期 YYYY-MM-DD（供表單預設值用）
+function localYmd(offsetDays) {
+  var d = new Date();
+  d.setDate(d.getDate() + (offsetDays || 0));
+  var mm = String(d.getMonth() + 1).padStart(2, '0');
+  var dd = String(d.getDate()).padStart(2, '0');
+  return d.getFullYear() + '-' + mm + '-' + dd;
 }
