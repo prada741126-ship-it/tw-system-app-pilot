@@ -1959,3 +1959,64 @@ input, select, textarea { font-size: 16px; }
 .more-tx b { font-size: 16px; font-weight: 600; }
 .more-tx small { font-size: 12px; color: var(--text-secondary, #888); margin-top: 2px; }
 .more-ar { font-size: 22px; color: var(--text-secondary, #aaa); line-height: 1; }
+
+/* ==========================================================================
+   v1.7.0 會員搜尋選擇器（取代原生 select，手機上更好用）
+   ========================================================================== */
+.member-picker-dropdown {
+  position: absolute; top: 100%; left: 0; right: 0; z-index: 1000;
+  max-height: 260px; overflow-y: auto;
+  background: var(--bg-secondary, #fff);
+  border: 1px solid var(--border, #ddd);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+}
+.member-picker-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 12px 14px; border-bottom: 1px solid var(--border, #f0f0f0);
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.member-picker-item:active { background: var(--bg-hover, rgba(0,0,0,0.05)); }
+.member-picker-item:last-child { border-bottom: none; }
+.member-picker-name { font-weight: 600; font-size: 15px; flex: 1; }
+.member-picker-id { font-size: 12px; color: var(--text-muted, #999); }
+.member-picker-rate { font-size: 12px; color: var(--text-secondary, #666); white-space: nowrap; }
+.member-picker-empty { text-align: center; color: var(--text-muted, #999); padding: 20px; font-size: 14px; }
+
+/* ==========================================================================
+   v1.7.0 總覽快捷操作置頂 + 待結帳 badge
+   ========================================================================== */
+.ov-qa-primary {
+  background: var(--accent-bg, #e8f0ff) !important;
+  border-color: var(--accent, #4a90d9) !important;
+}
+.ov-qa-primary span { color: var(--accent, #4a90d9); font-weight: 700; }
+.ov-qa-badge {
+  position: absolute; top: -4px; right: -4px;
+  background: var(--danger, #e74c3c); color: #fff;
+  font-size: 11px; font-weight: 700;
+  min-width: 20px; height: 20px; line-height: 20px;
+  border-radius: 10px; text-align: center;
+  padding: 0 4px;
+}
+.ov-qa-card { position: relative; }
+
+/* ==========================================================================
+   v1.7.0 下拉刷新指示器
+   ========================================================================== */
+#ptr-indicator {
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  height: 0; overflow: hidden;
+  font-size: 13px; color: var(--text-muted, #999);
+  opacity: 0; transition: opacity 0.2s;
+  position: relative; z-index: 5;
+}
+#ptr-indicator .ptr-icon { font-size: 18px; }
+
+/* ==========================================================================
+   v1.7.0 Toast 點擊關閉 + 位置避開底部操作區
+   ========================================================================== */
+#toast-container { pointer-events: none; }
+.toast { pointer-events: auto; cursor: pointer; }
+.toast:active { opacity: 0.7; }
+
