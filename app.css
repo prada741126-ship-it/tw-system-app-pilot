@@ -2020,3 +2020,33 @@ input, select, textarea { font-size: 16px; }
 .toast { pointer-events: auto; cursor: pointer; }
 .toast:active { opacity: 0.7; }
 
+
+/* ==========================================================================
+   v1.8.0 開銷行手機版：兩行式排列（原本 6 欄擠一行爆版）
+   第一行：類型下拉（全寬）、名稱（全寬）；第二行：數量/金額/匯率/刪除
+   ========================================================================== */
+@media (max-width: 768px) {
+  .expense-row { flex-wrap: wrap; row-gap: 8px; }
+  .expense-row > * { min-width: 0 !important; width: auto !important; }
+  .expense-row > select { flex: 1 1 100% !important; }
+  .expense-row > span { flex: 1 1 100% !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .expense-row > input { flex: 1 1 28% !important; }
+  .expense-row > button { flex: 0 0 40px !important; }
+}
+
+/* ==========================================================================
+   v1.8.0 彈窗儲存列固定底部（鍵盤彈出、長表單滾動時都按得到）
+   ========================================================================== */
+@media (max-width: 768px) {
+  .modal-box .row-actions {
+    position: sticky; bottom: 0; z-index: 6;
+    background: var(--bg-secondary, #fff);
+    padding: 10px 0 calc(4px + env(safe-area-inset-bottom, 0px));
+    margin-top: 10px;
+    border-top: 1px solid var(--border, #eee);
+  }
+  .modal-box .row-actions .btn {
+    width: 100%; padding: 14px 12px; font-size: 16px;
+  }
+  .modal-box .row-actions .btn + .btn { margin-top: 8px; }
+}
