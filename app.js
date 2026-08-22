@@ -6883,9 +6883,30 @@ var MemberPage = (function() {
     Modal.open('新增帳務', html);
     if (prefillTx && prefillTx.expenses) {
       _expenseRows = prefillTx.expenses.map(function(e) { return Object.assign({}, e); });
+      // v1.9.10 載入守門：舊資料殘留 absorbed=true 自動歸零＋提示
+      _pruneStaleAbsorbed();
       renderExpenseRows();
     }
     _healTripMembers(); // v1.9.7 本機缺團員時自動補拉 Firebase 會員資料
+  }
+
+  // v1.9.10 載入守門：若預載進來的 expense 帶 absorbed=true，自動歸零並提示
+  // 背景：v1.9.5 測試初期資料被誤存吸收狀態，導致帳務總交收口徑錯誤
+  function _pruneStaleAbsorbed() {
+    var purged = 0;
+    var purgedNames = [];
+    _expenseRows.forEach(function(e) {
+      if (e.absorbed) {
+        purged++;
+        purgedNames.push(e.name || '(未命名)');
+        e.absorbed = false;
+      }
+    });
+    if (purged > 0) {
+      setTimeout(function() {
+        Toast.warning('已自動清除舊資料殘留的「吸收」標記：' + purgedNames.join('、') + '（共 ' + purged + ' 筆），請依需求重新勾選');
+      }, 200);
+    }
   }
 
   // v1.7.0 會員搜尋選擇器
@@ -7172,6 +7193,8 @@ var MemberPage = (function() {
     if (!tx) return;
     _expenseRows = (tx.expenses || []).map(function(e) { return Object.assign({}, e); });
     _washManual = false; // v1.9.4 重置洗碼手動鎖
+    // v1.9.10 載入守門：舊資料殘留 absorbed=true 自動歸零＋提示
+    _pruneStaleAbsorbed();
 
     var html = '<div class="form-group"><label>會員: ' + tx.memberId + '</label></div>';
     html += '<div class="form-group"><label>貴賓廳</label>';
