@@ -488,6 +488,19 @@ var esc = (function() {
 
 // 別名：部分頁面原名使用 escHtml — 統一由這裡提供，移除各頁複製貼上的本地版本
 var escHtml = esc;
+// v1.8.0 屬性值跳脫別名（esc 已含引號，屬性安全）
+var escAttr = esc;
+// v1.8.0 JS 內嵌字串跳脫（onclick="fn('...')" 情境：先 & 再反斜線再引號）
+function escJs(value) {
+  if (value === null || value === undefined) return '';
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/\\/g, '\\\\')
+    .replace(/'/g, "\\'")
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = { esc: esc, escHtml: escHtml };
@@ -1055,6 +1068,8 @@ if (typeof module !== 'undefined' && module.exports) {
  */
 var Router = (function() {
   var _current = 'overview';
+  var _history = [];      // v1.8.0 返回堆疊（邊緣滑動返回用）
+  var _suppressPush = false;
 
   function go(pageName) {
     // Phase 1A：頁面讀取權限攔截（未登入放行 — 登入流程另有把關）
@@ -1067,6 +1082,8 @@ var Router = (function() {
     var page = PAGES.find(function(p) { return p.name === pageName; });
     var pageId = page ? page.id : 'page-' + pageName;
 
+    // v1.8.0 記錄返回堆疊（同頁重複 go 不記）
+    if (!_suppressPush && pageName !== _current) _history.push(_current);
     _current = pageName;
 
     document.querySelectorAll('.page-section').forEach(function(el) { el.classList.remove('active'); });
@@ -1094,7 +1111,14 @@ var Router = (function() {
 
   function getCurrent() { return _current; }
 
-  return { go: go, getCurrent: getCurrent };
+  // v1.8.0 返回上一頁（邊緣滑動返回用）
+  function back() {
+    var prev = _history.length > 0 ? _history.pop() : 'overview';
+    _suppressPush = true;
+    try { go(prev); } finally { _suppressPush = false; }
+  }
+
+  return { go: go, getCurrent: getCurrent, back: back };
 })();
 
 
@@ -4522,6 +4546,45 @@ var FormFX = (function() {
  * 依赖: core/escape.js
  */
 var Modal = (function() {
+  var _gesturesBound = false;
+  // v1.8.0 點擊黑邊關閉 + 標題列下拉關閉（像原生 App 的 sheet）
+  function _bindGestures() {
+    if (_gesturesBound) return;
+    _gesturesBound = true;
+    var overlay = document.getElementById('modal-overlay');
+    if (!overlay) return;
+    overlay.addEventListener('click', function(e) {
+      if (e.target === overlay) close();
+    });
+    var box = overlay.querySelector('.modal-box');
+    var header = overlay.querySelector('.modal-header');
+    if (!box || !header) return;
+    var sy = 0, dy = 0, dragging = false;
+    header.addEventListener('touchstart', function(e) {
+      sy = e.touches[0].clientY; dy = 0; dragging = true;
+    }, { passive: true });
+    header.addEventListener('touchmove', function(e) {
+      if (!dragging) return;
+      dy = e.touches[0].clientY - sy;
+      if (dy > 0) {
+        box.style.transition = 'none';
+        box.style.transform = 'translateY(' + dy + 'px)';
+        if (e.cancelable) e.preventDefault();
+      }
+    }, { passive: false });
+    header.addEventListener('touchend', function() {
+      if (!dragging) return;
+      dragging = false;
+      box.style.transition = '';
+      box.style.transform = '';
+      if (dy > 90) close();
+    });
+    header.addEventListener('touchcancel', function() {
+      dragging = false;
+      box.style.transition = '';
+      box.style.transform = '';
+    });
+  }
   function open(title, contentHTML, options) {
     var overlay = document.getElementById('modal-overlay');
     var titleEl = document.getElementById('modal-title');
@@ -4530,6 +4593,7 @@ var Modal = (function() {
     if (titleEl) titleEl.textContent = title || '';
     if (bodyEl) bodyEl.innerHTML = contentHTML || '';
     overlay.classList.add('active');
+    _bindGestures();
     if (options && options.onOpen) setTimeout(options.onOpen, 50);
   }
   function close() {
@@ -5209,12 +5273,12 @@ var OverviewPage = (function() {
     }).length;
 
     var html = '';
-    // v1.7.0 快捷操作置頂（手機上第一眼就能直達常用功能）
+    // v1.8.0 快捷操作依作業流程排序：帳務(開工) → 訂房 → 待結帳(收工結帳) → 會員查詢 → 建團
     html += '<div class="ov-quick-actions">';
     html += '<div class="ov-qa-card ov-qa-primary" onclick="OverviewPage._quickAddTx()"><div class="ov-qa-icon">' + ICONS.chart + '</div><span>新增帳務</span></div>';
+    html += '<div class="ov-qa-card" onclick="Router.go(\'room\')"><div class="ov-qa-icon">' + ICONS.booking + '</div><span>訂房</span></div>';
     var pendingBadge = pendingTrips.length > 0 ? '<span class="ov-qa-badge">' + pendingTrips.length + '</span>' : '';
     html += '<div class="ov-qa-card" onclick="Router.go(\'pending\')"><div class="ov-qa-icon">' + ICONS.warning + '</div><span>待結帳</span>' + pendingBadge + '</div>';
-    html += '<div class="ov-qa-card" onclick="Router.go(\'room\')"><div class="ov-qa-icon">' + ICONS.booking + '</div><span>訂房</span></div>';
     html += '<div class="ov-qa-card" onclick="Router.go(\'member\')"><div class="ov-qa-icon">' + ICONS.member + '</div><span>會員查詢</span></div>';
     html += '<div class="ov-qa-card" onclick="OverviewPage.showCreateTrip()"><div class="ov-qa-icon">' + ICONS.active + '</div><span>建團</span></div>';
     html += '</div>';
@@ -6346,7 +6410,7 @@ var MemberPage = (function() {
     html += '<div class="member-picker" style="position:relative;">';
     html += '<input type="hidden" id="tx-member" value="' + escAttr(defaultMemberId) + '">';
     html += '<input type="text" id="tx-member-search" class="form-input" placeholder="搜尋會員（名字或編號）..." value="' + escAttr(defaultM.name || '') + ' (' + escAttr(defaultM.id || '') + ')"';
-    html += ' onfocus="MemberPage._onMemberSearchFocus()" oninput="MemberPage._onMemberSearchInput(this.value)" autocomplete="off">';
+    html += ' onfocus="MemberPage._onMemberSearchFocus(this)" oninput="MemberPage._onMemberSearchInput(this.value)" autocomplete="off">';
     html += '<div id="tx-member-dropdown" class="member-picker-dropdown" style="display:none;"></div>';
     html += '</div></div>';
     html += '<div class="form-group"><label>貴賓廳</label>';
@@ -6385,7 +6449,9 @@ var MemberPage = (function() {
   }
 
   // v1.7.0 會員搜尋選擇器
-  function _onMemberSearchFocus() {
+  function _onMemberSearchFocus(el) {
+    // v1.8.0 自動全選 — 點下去直接打字就能搜尋，不用先刪預填字
+    if (el && el.select) setTimeout(function() { try { el.select(); } catch (e) {} }, 60);
     _renderMemberDropdown('');
   }
   function _onMemberSearchInput(val) {
@@ -6505,6 +6571,8 @@ var MemberPage = (function() {
       } else {
         html += '<select class="form-input" style="flex:1;min-width:100px;" onchange="MemberPage._updExpType(' + i + ',this.value)">';
         html += '<option value="other"' + (row.ticketType === 'other' || !row.ticketType ? ' selected' : '') + '>其他</option>';
+        // v1.8.0 借款(港幣)：客人跟公司借港幣，結帳時從交收扣除
+        html += '<option value="loan"' + (row.ticketType === 'loan' ? ' selected' : '') + '>借款(港幣)</option>';
         (tp.waterDance || []).forEach(function(t, j) {
           var val = 'wd-' + j;
           html += '<option value="' + val + '"' + (row.ticketType === val ? ' selected' : '') + '>水舞間 ' + esc(t.name) + ' (' + t.guestPrice + ')</option>';
@@ -6537,6 +6605,10 @@ var MemberPage = (function() {
     var qty = _expenseRows[i].quantity || 1;
     if (val === 'other') {
       _expenseRows[i].name = '';
+      _expenseRows[i].unitPrice = 0;
+    } else if (val === 'loan') {
+      // v1.8.0 借款(港幣)：金額手填，單價不適用
+      _expenseRows[i].name = '借款(港幣)';
       _expenseRows[i].unitPrice = 0;
     } else if (val === 'wp') {
       var wp = tp.waterPark || { guestPrice: 450, ourPrice: 406 };
@@ -7183,7 +7255,6 @@ var RoomPage = (function() {
     var trip = Trips.getById(_selectedTrip);
     if (!trip) return;
     var agents = Agents.getAll();
-    var members = Members.getAll();
 
     var html = '';
     html += '<div class="form-row">';
@@ -7213,19 +7284,63 @@ var RoomPage = (function() {
     html += '<div class="form-group"><label>確認號</label><input type="text" id="bk-confirm" class="form-input" placeholder="選填"></div>';
     html += '</div>';
 
+    // v1.8.0 關聯會員改搜尋選擇器（原生 select 在手機上是全螢幕滾輪，難用）
     html += '<div class="form-group"><label>關聯會員(可選)</label>';
-    html += '<select id="bk-member" class="form-input"><option value="">純住宿(不關聯)</option>';
-    members.forEach(function(m) { html += '<option value="' + m.id + '">' + m.id + ' ' + esc(m.name) + '</option>'; });
-    html += '</select></div>';
+    html += '<div class="member-picker" style="position:relative;">';
+    html += '<input type="hidden" id="bk-member" value="">';
+    html += '<input type="text" id="bk-member-search" class="form-input" placeholder="搜尋會員（留空 = 純住宿不關聯）..." onfocus="RoomPage._onPkMemberFocus(this,\'bk\')" oninput="RoomPage._onPkMemberInput(\'bk\',this.value)" autocomplete="off">';
+    html += '<div id="bk-member-dropdown" class="member-picker-dropdown" style="display:none;"></div>';
+    html += '</div></div>';
 
     html += '<div class="row-actions">';
     html += '<button class="btn btn-primary" id="bk-save-btn" onclick="RoomPage.saveBooking()">儲存</button></div>';
     Modal.open('新增訂房', html);
   }
 
+  // v1.8.0 訂房/編輯訂房表單會員搜尋選擇器（prefix: 'bk' 或 'eb'）
+  function _onPkMemberFocus(el, prefix) {
+    if (el && el.select) setTimeout(function() { try { el.select(); } catch (e) {} }, 60);
+    _renderPkMemberDD(prefix, '');
+  }
+  function _onPkMemberInput(prefix, val) {
+    _renderPkMemberDD(prefix, val);
+  }
+  function _renderPkMemberDD(prefix, query) {
+    var dd = document.getElementById(prefix + '-member-dropdown');
+    if (!dd) return;
+    var members = Members.getAll();
+    var q = (query || '').trim().toLowerCase();
+    var filtered = members.filter(function(m) {
+      if (!q) return true;
+      return (m.name || '').toLowerCase().indexOf(q) >= 0 || (m.id || '').toLowerCase().indexOf(q) >= 0;
+    });
+    var html = '<div class="member-picker-item" onclick="RoomPage._selectPkMember(\'' + prefix + '\',\'\')">' +
+      '<span class="member-picker-name">純住宿(不關聯)</span><span class="member-picker-rate">清除選擇</span></div>';
+    if (filtered.length === 0) {
+      html += '<div class="member-picker-item member-picker-empty">找不到會員</div>';
+    } else {
+      html += filtered.slice(0, 20).map(function(m) {
+        return '<div class="member-picker-item" onclick="RoomPage._selectPkMember(\'' + prefix + '\',\'' + escJs(m.id) + '\')">'
+          + '<span class="member-picker-name">' + esc(m.name || '') + '</span>'
+          + '<span class="member-picker-id">' + esc(m.id) + '</span>'
+          + '</div>';
+      }).join('');
+    }
+    dd.innerHTML = html;
+    dd.style.display = 'block';
+  }
+  function _selectPkMember(prefix, memberId) {
+    var hidden = document.getElementById(prefix + '-member');
+    var search = document.getElementById(prefix + '-member-search');
+    var dd = document.getElementById(prefix + '-member-dropdown');
+    var m = memberId ? Members.getById(memberId) : null;
+    if (hidden) hidden.value = memberId || '';
+    if (search) search.value = m ? ((m.name || '') + ' (' + (m.id || '') + ')') : '';
+    if (dd) dd.style.display = 'none';
+  }
+
   function onCasinoChange() {
-    var casino = document.getElementById('bk-casino').value;
-    var hotels = HotelConfig.getHotels(casino);
+    var casino = document.getElementById('bk-casino').value;    var hotels = HotelConfig.getHotels(casino);
     var select = document.getElementById('bk-hotel');
     select.innerHTML = '<option value="">選擇...</option>' + hotels.map(function(h) { return '<option value="' + h + '">' + h + '</option>'; }).join('');
     document.getElementById('bk-room').innerHTML = '<option value="">先選酒店</option>';
@@ -7242,6 +7357,7 @@ var RoomPage = (function() {
   }
 
   var _bkSaving = false; // v1.7.0 防重複提交鎖
+  var _ebSaving = false; // v1.8.0 編輯訂房防重複提交鎖
 
   function saveBooking() {
     if (_bkSaving) return; // v1.7.0 防重複提交
@@ -7290,7 +7406,6 @@ var RoomPage = (function() {
   function editBooking(id) {
     var b = Bookings.getById(id);
     if (!b) return;
-    var members = Members.getAll();
     var html = '<div class="form-row">';
     html += '<div class="form-group"><label>確認號</label><input type="text" id="eb-confirm" class="form-input" value="' + (b.confirmNo || '') + '"></div>';
     html += '<div class="form-group"><label>狀態</label>';
@@ -7299,13 +7414,15 @@ var RoomPage = (function() {
       html += '<option value="' + s + '"' + (b.status === s ? ' selected' : '') + '>' + (STATUS_LABELS[s] || s) + '</option>';
     });
     html += '</select></div></div>';
+    // v1.8.0 編輯訂房會員改搜尋選擇器（預帶原會員）
+    var curMember = b.memberId ? Members.getById(b.memberId) : null;
     html += '<div class="form-row">';
     html += '<div class="form-group"><label>關聯會員</label>';
-    html += '<select id="eb-member" class="form-input"><option value="">純住宿(不關聯)</option>';
-    members.forEach(function(m) {
-      html += '<option value="' + m.id + '"' + (b.memberId === m.id ? ' selected' : '') + '>' + m.id + ' ' + esc(m.name) + '</option>';
-    });
-    html += '</select></div></div>';
+    html += '<div class="member-picker" style="position:relative;">';
+    html += '<input type="hidden" id="eb-member" value="' + escAttr(b.memberId || '') + '">';
+    html += '<input type="text" id="eb-member-search" class="form-input" placeholder="搜尋會員（留空 = 純住宿不關聯）..." value="' + escAttr(curMember ? ((curMember.name || '') + ' (' + (curMember.id || '') + ')') : '') + '" onfocus="RoomPage._onPkMemberFocus(this,\'eb\')" oninput="RoomPage._onPkMemberInput(\'eb\',this.value)" autocomplete="off">';
+    html += '<div id="eb-member-dropdown" class="member-picker-dropdown" style="display:none;"></div>';
+    html += '</div></div></div>';
     html += '<div class="form-row">';
     html += '<div class="form-group"><label>費用類型</label>';
     html += '<select id="eb-fee" class="form-input">';
@@ -7320,24 +7437,32 @@ var RoomPage = (function() {
     html += '<div class="form-group"><label>退房日</label><input type="date" id="eb-checkout" class="form-input" value="' + (b.checkOut || '').slice(0, 10) + '"></div>';
     html += '</div>';
     html += '<div class="row-actions">';
-    html += '<button class="btn btn-primary" onclick="RoomPage.saveEditBooking(\'' + id + '\')">儲存</button></div>';
+    html += '<button class="btn btn-primary" id="eb-save-btn" onclick="RoomPage.saveEditBooking(\'' + id + '\')">儲存</button></div>';
     Modal.open('編輯訂房', html);
   }
 
   function saveEditBooking(id) {
-    Bookings.update(id, {
-      confirmNo: document.getElementById('eb-confirm').value,
-      status: document.getElementById('eb-status').value,
-      feeType: document.getElementById('eb-fee').value,
-      memberId: document.getElementById('eb-member').value || null,
-      feeManualOverride: true,
-      chargeGuest: parseFloat(document.getElementById('eb-charge-guest').value) || 0,
-      checkIn: document.getElementById('eb-checkin').value,
-      checkOut: document.getElementById('eb-checkout').value,
-    });
-    Modal.close();
-    Toast.success('訂房已更新');
-    render();
+    if (_ebSaving) return; // v1.8.0 防重複提交
+    var btn = document.getElementById('eb-save-btn');
+    _ebSaving = true;
+    if (btn) { btn.disabled = true; btn.textContent = '儲存中...'; }
+    try {
+      Bookings.update(id, {
+        confirmNo: document.getElementById('eb-confirm').value,
+        status: document.getElementById('eb-status').value,
+        feeType: document.getElementById('eb-fee').value,
+        memberId: document.getElementById('eb-member').value || null,
+        feeManualOverride: true,
+        chargeGuest: parseFloat(document.getElementById('eb-charge-guest').value) || 0,
+        checkIn: document.getElementById('eb-checkin').value,
+        checkOut: document.getElementById('eb-checkout').value,
+      });
+      Modal.close();
+      Toast.success('訂房已更新');
+      render();
+    } finally {
+      _ebSaving = false;
+    }
   }
 
   function delBooking(id) {
@@ -7765,6 +7890,7 @@ var RoomPage = (function() {
     render: render, selectTrip: selectTrip,
     showAddBooking: showAddBooking, onCasinoChange: onCasinoChange, onHotelChange: onHotelChange,
     saveBooking: saveBooking, editBooking: editBooking, saveEditBooking: saveEditBooking, delBooking: delBooking,
+    _onPkMemberFocus: _onPkMemberFocus, _onPkMemberInput: _onPkMemberInput, _selectPkMember: _selectPkMember,
     goPage: goPage, onSearch: onSearch, sortByCol: sortByCol, setFeeFilter: setFeeFilter,
     goFees: goFees, goProfit: goProfit,
     toggleFeePanel: toggleFeePanel, cycleFeeType: cycleFeeType, setFeeMode: setFeeMode,
@@ -11100,6 +11226,7 @@ function exposeGlobals() {
   window.Router = Router;
   window.Auth = Auth;
   window.Perm = Perm;
+  window._syncBadgeRetry = (typeof MobileUI !== 'undefined' && MobileUI._syncBadgeRetry) ? MobileUI._syncBadgeRetry : function(){}; // v1.8.0 同步徽章點擊重試
   // Sync
   window.FirebaseSync = FirebaseSync;
   window.FB_PATH = FB_PATH;
@@ -12721,11 +12848,23 @@ var MobileUI = (function() {
     };
     var icon = icons[status] || icons.synced;
 
-    return '<span class="sync-badge sync-' + (status || 'synced') + '">' +
-      '<span class="sync-icon">' + icon + '</span>' +
-      '<span class="sync-text">' + text + '</span>' +
-      '<span class="sync-count" id="sync-pending-count"></span>' +
-    '</span>';
+    // v1.8.0 點擊徽章 → 手動重試同步
+    return '<span class="sync-badge sync-' + (status || 'synced') + '" style="cursor:pointer;" onclick="window._syncBadgeRetry()" title="點擊重新同步">'
+      + '<span class="sync-icon">' + icon + '</span>'
+      + '<span class="sync-text">' + text + '</span>'
+      + '<span class="sync-count" id="sync-pending-count"></span>'
+    + '</span>';
+  }
+
+  // v1.8.0 同步徽章點擊 → 強制重新同步
+  function _syncBadgeRetry() {
+    if (typeof Toast !== 'undefined') Toast.info('重新同步中...');
+    if (typeof _resyncAll === 'function') {
+      try {
+        var p = _resyncAll();
+        if (p && p.then) p.then(function() { if (typeof Toast !== 'undefined') Toast.success('同步完成'); });
+      } catch (e) { /* 忽略，下方 fallback */ }
+    }
   }
 
   function _updateSyncIndicator(status, text, pendingCount) {
@@ -12974,6 +13113,7 @@ var MobileUI = (function() {
   return {
     init: init,
     getSettingsExtraHTML: getSettingsExtraHTML,
+    _syncBadgeRetry: _syncBadgeRetry, // v1.8.0 同步徽章點擊重試
   };
 })();
 
@@ -13171,10 +13311,47 @@ var IosPWA = (function() {
     }
   }
 
+  // v1.8.0 全域手勢：點外部關閉會員下拉 + 左邊緣滑動返回
+  function setupGlobalGestures() {
+    if (setupGlobalGestures._bound) return;
+    setupGlobalGestures._bound = true;
+
+    // 點擊 .member-picker 以外的地方 → 關閉所有會員下拉
+    document.addEventListener('click', function(e) {
+      if (!e.target || !e.target.closest) return;
+      if (e.target.closest('.member-picker')) return;
+      document.querySelectorAll('.member-picker-dropdown').forEach(function(d) {
+        d.style.display = 'none';
+      });
+    });
+
+    // 左邊緣往右滑：關閉彈窗（優先）或返回上一頁
+    var edgeX = 0, edgeY = 0, tracking = false;
+    document.addEventListener('touchstart', function(e) {
+      if (e.touches.length !== 1) { tracking = false; return; }
+      var t = e.touches[0];
+      if (t.clientX <= 28) { edgeX = t.clientX; edgeY = t.clientY; tracking = true; }
+      else tracking = false;
+    }, { passive: true });
+    document.addEventListener('touchend', function(e) {
+      if (!tracking) return;
+      tracking = false;
+      var t = e.changedTouches[0];
+      if (!t) return;
+      var dx = t.clientX - edgeX;
+      var dy = Math.abs(t.clientY - edgeY);
+      if (dx > 70 && dy < 60) {
+        if (typeof Modal !== 'undefined' && Modal.isOpen()) Modal.close();
+        else if (typeof Router !== 'undefined') Router.back();
+      }
+    }, { passive: true });
+  }
+
   function init() {
     applySafeArea();
     preventOverscroll();
     setupPullToRefresh();
+    setupGlobalGestures();
 
     // 登入畫面就顯示引導（延遲 1 秒避免遮擋啟動）
     setTimeout(showInstallGuide, 1000);
