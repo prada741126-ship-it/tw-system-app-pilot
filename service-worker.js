@@ -6,7 +6,7 @@
  *   - 其他 → stale-while-revalidate
  */
 
-var CACHE_VERSION = 'tw-app-v1.9.0';  // 2026-08-23 流程對齊：建團預計日期/酒店、報表全團可選、待結帳分享明細(navigator.share)、訂房預帶代理、會員編號自動建議+防重、TripPicker 團搜尋器、送入待結帳大按鈕
+var CACHE_VERSION = 'tw-app-v1.9.1';  // 2026-08-23 修bug：假性同步衝突(鍵序誤判+白話顯示)、會員查詢跳錯頁、設定頁橫向捲動、備份iOS分享面板
 var STATIC_CACHE = CACHE_VERSION + '-static';
 var RUNTIME_CACHE = CACHE_VERSION + '-runtime';
 
