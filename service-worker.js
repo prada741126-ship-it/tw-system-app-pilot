@@ -6,7 +6,7 @@
  *   - 其他 → stale-while-revalidate
  */
 
-var CACHE_VERSION = 'tw-app-v1.9.7';  /// 2026-08-23 帳務會員選擇器加本團人數表頭;本機缺團員資料時警示並自動從Firebase補拉(跨裝置同步漏接)
+var CACHE_VERSION = 'tw-app-v1.9.8';  /// 2026-08-23 開銷吸收項金額欄改為「招待」標籤(會員端不顯示數字),並標註不從交收扣除
 var STATIC_CACHE = CACHE_VERSION + '-static';
 var RUNTIME_CACHE = CACHE_VERSION + '-runtime';
 
