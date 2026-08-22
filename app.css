@@ -2152,3 +2152,10 @@ input, select, textarea { font-size: 16px; }
 .tx-absorb-tag { display: inline-block; padding: 0 5px; border-radius: 8px; font-size: 10px; font-weight: 700; line-height: 1.6; color: #fff; background: #e67e22; vertical-align: middle; margin-left: 2px; white-space: nowrap; }
 .exp-absorb-total td, .exp-absorb-total-row { color: #e67e22; font-weight: 700; }
 .exp-absorb-total-row span:first-child::after { content: '（不從交收扣除）'; font-weight: 400; font-size: 11px; }
+
+/* v1.9.8 代理吸收：金额栏改为「招待」(不顯示数字)，整行加浅绿底便于会员辨识 */
+.exp-row-host { background: #fff8e6; }
+.mb-card-expense-row.exp-row-host,
+.exp-table tr.exp-row-host { background: #fff8e6; }
+.exp-host-cell { background: linear-gradient(90deg, #fde9c8, #fff8e6); padding: 4px 8px; border-radius: 4px; font-weight: 600; color: #b35900; text-align: center; font-size: 12px; }
+.exp-host-badge { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 11px; font-weight: 700; color: #fff; background: #2eaa6b; margin-right: 4px; }
