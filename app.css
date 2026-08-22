@@ -2143,3 +2143,12 @@ input, select, textarea { font-size: 16px; }
    v1.9.4 帳務來源標籤（BOT 自動結帳）+ 洗碼手動輸入提示
    ========================================================================== */
 .tx-source-tag { display: inline-block; padding: 1px 6px; border-radius: 8px; font-size: 11px; font-weight: 700; line-height: 1.5; color: #fff; background: var(--primary, #1a73e8); vertical-align: middle; margin-left: 4px; }
+
+/* ==========================================================================
+   v1.9.5 代理吸收開銷（例：代購蛋塔由上級代理自行吸收，不從會員交收扣除）
+   ========================================================================== */
+.exp-absorb { display: flex; align-items: center; gap: 3px; flex: 0 0 auto; font-size: 12px; color: var(--text-secondary, #666); white-space: nowrap; cursor: pointer; user-select: none; padding: 0 2px; }
+.exp-absorb input { width: 16px; height: 16px; margin: 0; cursor: pointer; }
+.tx-absorb-tag { display: inline-block; padding: 0 5px; border-radius: 8px; font-size: 10px; font-weight: 700; line-height: 1.6; color: #fff; background: #e67e22; vertical-align: middle; margin-left: 2px; white-space: nowrap; }
+.exp-absorb-total td, .exp-absorb-total-row { color: #e67e22; font-weight: 700; }
+.exp-absorb-total-row span:first-child::after { content: '（不從交收扣除）'; font-weight: 400; font-size: 11px; }
