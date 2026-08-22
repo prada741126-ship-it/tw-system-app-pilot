@@ -6,7 +6,7 @@
  *   - 其他 → stale-while-revalidate
  */
 
-var CACHE_VERSION = 'tw-app-v1.8.0';  // 2026-08-22 修復 escAttr/escJs 未定義炸版、彈窗點外/下滑關閉、訂房會員搜尋器、開銷行手機版、借款類型、邊緣滑動返回、同步徽章重試
+var CACHE_VERSION = 'tw-app-v1.9.0';  // 2026-08-23 流程對齊：建團預計日期/酒店、報表全團可選、待結帳分享明細(navigator.share)、訂房預帶代理、會員編號自動建議+防重、TripPicker 團搜尋器、送入待結帳大按鈕
 var STATIC_CACHE = CACHE_VERSION + '-static';
 var RUNTIME_CACHE = CACHE_VERSION + '-runtime';
 
