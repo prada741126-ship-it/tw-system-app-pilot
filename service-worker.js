@@ -6,7 +6,7 @@
  *   - 其他 → stale-while-revalidate
  */
 
-var CACHE_VERSION = 'tw-app-v1.7.0';  // 2026-08-22 快速操作優化：會員搜尋選擇器＋最近使用、防重複提交鎖、總覽快捷列、複製上一筆、千分位、下拉刷新、Toast 可點掉
+var CACHE_VERSION = 'tw-app-v1.8.0';  // 2026-08-22 修復 escAttr/escJs 未定義炸版、彈窗點外/下滑關閉、訂房會員搜尋器、開銷行手機版、借款類型、邊緣滑動返回、同步徽章重試
 var STATIC_CACHE = CACHE_VERSION + '-static';
 var RUNTIME_CACHE = CACHE_VERSION + '-runtime';
 
