@@ -6,7 +6,7 @@
  *   - 其他 → stale-while-revalidate
  */
 
-var CACHE_VERSION = 'tw-app-v1.9.9';  /// 2026-08-23 交收口徑修正:代理吸收=代理自掏腰包,公司應收總額=會員交收+代理吸收(向代理另收);待結帳/帳務代理面板/歷史/傳帳文字全部對齊
+var CACHE_VERSION = 'tw-app-v1.9.10';  /// 2026-08-23 載入守門:開帳務表單時自動清除舊資料殘留的 absorbed:true 並Toast提示,防誤存帳務被算成代理吸收
 var STATIC_CACHE = CACHE_VERSION + '-static';
 var RUNTIME_CACHE = CACHE_VERSION + '-runtime';
 
