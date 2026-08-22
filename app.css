@@ -2098,3 +2098,28 @@ input, select, textarea { font-size: 16px; }
   .pd-card-footer { display: flex; flex-direction: column; gap: 8px; }
   .pd-card-footer .btn { width: 100%; padding: 14px 12px; font-size: 16px; }
 }
+
+/* ==========================================================================
+   v1.9.1 修正
+   1. 手機版設定頁：卡片內容自己橫向捲動，不再拉動整頁
+   2. 同步衝突卡片白話版（衝突項目清單）
+   3. 會員管理關鍵字搜尋框
+   4. 備份按鈕手機全寬更顯眼
+   ========================================================================== */
+@media (max-width: 768px) {
+  .main-content { overflow-x: hidden; }
+  .card { overflow-x: auto; -webkit-overflow-scrolling: touch; max-width: 100%; }
+  .card .data-table { min-width: 440px; }
+  #st-backup-card .btn.btn-primary { width: 100%; padding: 14px 12px; font-size: 16px; font-weight: 700; }
+  #st-backup-card .form-input-file { width: 100%; }
+}
+
+/* 同步衝突項目（取代原本六欄寬表格，手機放不下也看不懂） */
+.conflict-item { border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 12px; margin-bottom: 10px; }
+.conflict-item-head { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 4px; margin-bottom: 6px; }
+.conflict-item-title { font-weight: 600; }
+.conflict-item-diff { font-size: var(--font-size-sm); color: var(--text-secondary); line-height: 1.7; margin-bottom: 8px; word-break: break-word; }
+.conflict-item-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* 會員管理關鍵字搜尋框（桌機與篩選同一列，手機跟著 filter-bar 直排） */
+#mgmt-kw-filter { flex: 1; min-width: 180px; }
