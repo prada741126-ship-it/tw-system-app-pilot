@@ -698,6 +698,7 @@ var Schema = (function() {
     },
     memberTxs: {
       id: 's!', tripId: 's!', memberId: 's!', createdAt: 'n',
+      source: 's',
     },
     bookings: {
       id: 's!', tripId: 's', memberId: 's', guestName: 's',
@@ -1312,7 +1313,17 @@ function calcTripStats(trip, memberTxs, bookings) {
 // 支援 monthlyOnly 代理：現結不進錢池、月退用自定費率、洗碼不計入個人貢獻
 function calcShareholderProfit(shareholder, allTxs, settings, month) {
   var sId = shareholder.id;
-  var monthlyRate = (settings.monthlyRates || {})[month] || { exchangeRate: 4.2, shareholderRate: 4.2 };
+  // v1.9.4 當月匯率未設定 → 自動沿用最近一個已設定月份（與 Settings.getMonthlyRate 同邏輯）
+  var _rates = (settings && settings.monthlyRates) || {};
+  var monthlyRate = _rates[month];
+  if (!monthlyRate) {
+    var _mkeys = Object.keys(_rates).sort();
+    for (var _mi = _mkeys.length - 1; _mi >= 0; _mi--) {
+      if (_mkeys[_mi] <= month) { monthlyRate = _rates[_mkeys[_mi]]; break; }
+    }
+    if (!monthlyRate && _mkeys.length > 0) monthlyRate = _rates[_mkeys[0]];
+  }
+  if (!monthlyRate) monthlyRate = { exchangeRate: 4.2, shareholderRate: 4.2 };
   var exchangeRate = monthlyRate.shareholderRate || 4.2;
   var halls = settings.vipHalls || VIP_HALLS;
 
@@ -3666,7 +3677,15 @@ var Settings = (function() {
   }
   function getMonthlyRate(month) {
     var s = get();
-    return (s.monthlyRates || {})[month] || { exchangeRate: 4.2, shareholderRate: 4.2 };
+    var rates = s.monthlyRates || {};
+    if (rates[month]) return rates[month];
+    // v1.9.4 當月未設定 → 自動沿用最近一個已設定的月份（使用者要求：無需每月手動重設）
+    var keys = Object.keys(rates).sort();
+    for (var i = keys.length - 1; i >= 0; i--) {
+      if (keys[i] <= month) return rates[keys[i]];
+    }
+    if (keys.length > 0) return rates[keys[0]];
+    return { exchangeRate: 4.2, shareholderRate: 4.2 };
   }
   function setMonthlyRate(month, rate) {
     var s = get();
@@ -5579,7 +5598,12 @@ var OverviewPage = (function() {
     // v1.9.0 預計前往日 + 預計酒店（作業流程第一步：客戶通知日期與酒店）
     html += '<div class="form-row">';
     html += '<div class="form-group"><label>預計前往日</label><input type="date" id="trip-visit" class="form-input" value="' + TWDate.todayStr() + '"></div>';
-    html += '<div class="form-group"><label>預計酒店(選填)</label><input type="text" id="trip-hotel" class="form-input" placeholder="例如：銀河"></div>';
+    // v1.9.4 預計酒店改結構化選單（體系→酒店，與訂房頁同一資料源），避免自由文字與網頁版/BOT 對不上；仍可手動輸入
+    html += '<div class="form-group"><label>體系</label><select id="trip-casino" class="form-input" onchange="OverviewPage.onTripCasinoChange()"><option value="">— 選擇 —</option>' + HotelConfig.getCasinos().map(function(c) { return '<option value="' + esc(c) + '">' + esc(c) + '</option>'; }).join('') + '</select></div>';
+    html += '</div>';
+    html += '<div class="form-group"><label>預計酒店(選填)</label>';
+    html += '<select id="trip-hotel" class="form-input" onchange="OverviewPage.onTripHotelChange()"><option value="">— 其他（手動輸入）—</option></select>';
+    html += '<input type="text" id="trip-hotel-manual" class="form-input" style="display:none;margin-top:6px;" placeholder="手動輸入酒店名">';
     html += '</div>';
     html += '<div class="form-group"><label>所屬股東</label>';
     html += '<select id="trip-sh" class="form-input">';
@@ -5625,6 +5649,20 @@ var OverviewPage = (function() {
 
   var _tripCreating = false; // v1.9.0 防重複提交鎖
 
+  // v1.9.4 建團酒店結構化選單連動
+  function onTripCasinoChange() {
+    var casino = document.getElementById('trip-casino').value;
+    var sel = document.getElementById('trip-hotel');
+    var manual = document.getElementById('trip-hotel-manual');
+    if (sel) sel.innerHTML = '<option value="">— 其他（手動輸入）—</option>' + HotelConfig.getHotels(casino).map(function(h) { return '<option value="' + esc(h) + '">' + esc(h) + '</option>'; }).join('');
+    if (manual) manual.style.display = 'none';
+  }
+  function onTripHotelChange() {
+    var manual = document.getElementById('trip-hotel-manual');
+    var sel = document.getElementById('trip-hotel');
+    if (manual) manual.style.display = (sel && sel.value) ? 'none' : 'block';
+  }
+
   function createTrip() {
     if (_tripCreating) return; // v1.9.0 防連點
     var shId = document.getElementById('trip-sh').value;
@@ -5633,7 +5671,10 @@ var OverviewPage = (function() {
     var memberIds = Array.from(document.querySelectorAll('.trip-member-cb:checked')).map(function(cb) { return cb.value; });
     var notes = document.getElementById('trip-notes').value;
     var visitEl = document.getElementById('trip-visit');
-    var hotelEl = document.getElementById('trip-hotel');
+    // v1.9.4 酒店取值：結構化選單優先，選「其他」時用手動輸入
+    var hotelSel = document.getElementById('trip-hotel');
+    var hotelManual = document.getElementById('trip-hotel-manual');
+    var hotelVal = (hotelSel && hotelSel.value) || (hotelManual ? (hotelManual.value || '').trim() : '');
 
     var btn = document.getElementById('trip-create-btn');
     if (btn) { btn.disabled = true; btn.textContent = '建立中...'; }
@@ -5643,7 +5684,7 @@ var OverviewPage = (function() {
         shareholderId: shId,
         agentId: agentId,
         visitDate: visitEl ? visitEl.value : '',
-        hotelNote: hotelEl ? hotelEl.value : '',
+        hotelNote: hotelVal,
         hallIds: hallIds,
         memberIds: memberIds,
         notes: notes,
@@ -5789,7 +5830,7 @@ var OverviewPage = (function() {
     if (Router.getCurrent() === 'overview') render();
   });
 
-  return { render: render, showCreateTrip: showCreateTrip, createTrip: createTrip, toggleAllMembers: toggleAllMembers, showEditTrip: showEditTrip, saveEditTrip: saveEditTrip, deleteTrip: deleteTrip, toggleAllMembersEdit: toggleAllMembersEdit, _quickAddTx: _quickAddTx };
+  return { render: render, showCreateTrip: showCreateTrip, createTrip: createTrip, toggleAllMembers: toggleAllMembers, showEditTrip: showEditTrip, saveEditTrip: saveEditTrip, deleteTrip: deleteTrip, toggleAllMembersEdit: toggleAllMembersEdit, _quickAddTx: _quickAddTx, onTripCasinoChange: onTripCasinoChange, onTripHotelChange: onTripHotelChange };
 
 })();
 
@@ -6098,13 +6139,18 @@ var PendingPage = (function() {
     var supPending = supplements.filter(function(s) { return s.status === 'pending'; })
       .reduce(function(s, sup) { return s + (sup.settlementAmount || 0); }, 0);
 
-    // 按會員分組（同卡片匯總表）
+    // 按會員分組（同卡片匯總表）；v1.9.4 同時彙總各會員開銷明細，讓上級看得到錢花在哪
     var memberGroups = {};
     mtxs.forEach(function(tx) {
       var mid = tx.memberId;
-      if (!memberGroups[mid]) memberGroups[mid] = { totalSettle: 0, hallName: '' };
+      if (!memberGroups[mid]) memberGroups[mid] = { totalSettle: 0, hallName: '', expNT: 0, expList: [] };
       memberGroups[mid].totalSettle += calcTotalNT(tx);
       if (!memberGroups[mid].hallName) memberGroups[mid].hallName = getHallName(tx, trip);
+      (tx.expenses || []).forEach(function(e) {
+        memberGroups[mid].expNT += (e.amountHK || 0) * (e.exchangeRate || 0);
+        var q = (e.quantity && e.quantity > 1) ? '×' + e.quantity : '';
+        memberGroups[mid].expList.push((e.name || '項目') + q + ' ' + fmtCardNum(e.amountHK || 0) + 'HK');
+      });
     });
 
     var lines = [];
@@ -6123,6 +6169,7 @@ var PendingPage = (function() {
         var g = memberGroups[mid];
         var m = Members.getById(mid);
         lines.push((m ? maskName(m.name) : mid) + '（' + g.hallName + '）交收 NT$ ' + fmtCardNum(Math.round(g.totalSettle)));
+        if (g.expList.length > 0) lines.push('　開銷: ' + g.expList.join('、') + '（NT$ ' + fmtCardNum(Math.round(g.expNT)) + '，已從交收扣除）');
       });
       lines.push('──── 合計 NT$ ' + fmtCardNum(Math.trunc(totalSettle / 100) * 100) + ' ────');
     } else {
@@ -6315,7 +6362,7 @@ var MemberPage = (function() {
 
           // 卡片標頭：廳名 + 日期 + 會員編號 + 客稱
           html += '<div class="mb-card-header">';
-          html += '<div class="mb-card-hall">' + (hall ? hall.name : (tx.vipHallId || '')) + (tx.date ? ' · ' + tx.date : '') + '</div>';
+          html += '<div class="mb-card-hall">' + (hall ? hall.name : (tx.vipHallId || '')) + (tx.date ? ' · ' + tx.date : '') + (tx.source === 'bot' ? ' <span class="tx-source-tag" title="BOT 自動結帳">BOT</span>' : '') + '</div>';
           html += '<div class="mb-card-member">' + (m ? m.id : tx.memberId) + ' ' + (m ? m.name : '') + '</div>';
           html += '</div>';
 
@@ -6655,6 +6702,7 @@ var MemberPage = (function() {
     var defaultMemberId = defaultM.id || '';
 
     var html = '';
+    _washManual = false; // v1.9.4 開新表單重置洗碼手動鎖
     // v1.7.0 會員搜尋選擇器（取代原生 select）
     html += '<div class="form-group"><label>會員</label>';
     html += '<div class="member-picker" style="position:relative;">';
@@ -6672,6 +6720,8 @@ var MemberPage = (function() {
       html += '<option value="' + h.id + '"' + sel + '>' + esc(h.name) + '</option>';
     });
     html += '</select></div>';
+    // v1.9.4 帳務日期可指定（預設今天）— 隔天補帳不用存檔後再編輯改日期
+    html += '<div class="form-group"><label>日期</label><input type="date" id="tx-date" class="form-input" value="' + (prefillTx && prefillTx.date ? prefillTx.date : TWDate.todayStr()) + '"></div>';
     html += '<div class="form-row">';
     html += '<div class="form-group"><label>出碼(CR)(萬)</label><input type="number" inputmode="decimal" step="0.001" id="tx-out" class="form-input" value="' + (prefillTx ? fmtNum(prefillTx.outCode || 0) : '') + '" oninput="MemberPage.calcUpDown()"></div>';
     html += '<div class="form-group"><label>回碼(寄碼)(萬)</label><input type="number" inputmode="decimal" step="0.001" id="tx-back" class="form-input" value="' + (prefillTx ? fmtNum(prefillTx.backCode || 0) : '') + '" oninput="MemberPage.calcUpDown()"></div>';
@@ -6679,8 +6729,9 @@ var MemberPage = (function() {
     html += '<div class="form-row">';
     html += '<div class="form-group"><label>客上(萬)</label><input type="number" inputmode="decimal" step="0.001" id="tx-up" class="form-input" value="' + (prefillTx ? fmtNum(prefillTx.customerUp || 0) : '0') + '" oninput="MemberPage.calcWash()"></div>';
     html += '<div class="form-group"><label>客下(萬)</label><input type="number" inputmode="decimal" step="0.001" id="tx-down" class="form-input" value="' + (prefillTx ? fmtNum(prefillTx.customerDown || 0) : '0') + '" oninput="MemberPage.calcWash()"></div>';
-    html += '<div class="form-group"><label>洗碼(萬)</label><input type="number" inputmode="decimal" step="0.001" id="tx-wash" class="form-input" value="' + (prefillTx ? fmtNum(prefillTx.washCode || 0) : '') + '"></div>';
+    html += '<div class="form-group"><label>洗碼(萬)</label><input type="number" inputmode="decimal" step="0.001" id="tx-wash" class="form-input" value="' + (prefillTx ? fmtNum(prefillTx.washCode || 0) : '') + '" oninput="MemberPage._markWashManual()"></div>';
     html += '</div>';
+    html += '<div id="tx-wash-hint" style="font-size:12px;color:var(--text-muted);margin:-4px 0 8px;">自動 = 客上 + 客下（洗碼可手動覆寫）</div>';
     html += '<div class="form-row">';
     html += '<div class="form-group"><label>倍率1</label><input type="number" inputmode="decimal" step="0.01" id="tx-rate1" class="form-input" value="' + (defaultM.rate1 || 0) + '"></div>';
     html += '<div class="form-group"><label>返水1</label><input type="number" inputmode="decimal" step="0.001" id="tx-rebate1" class="form-input" value="' + (defaultM.rebate1 || 0) + '"></div>';
@@ -6797,15 +6848,36 @@ var MemberPage = (function() {
     }
     calcWash();
   }
+  // v1.9.4 洗碼手動鎖：手動改過洗碼後，出/回碼或客上/客下的連動不再覆蓋手動值
+  var _washManual = false;
+  function _markWashManual() {
+    _washManual = true;
+    var hint = document.getElementById('tx-wash-hint');
+    if (hint) hint.textContent = '已手動輸入（不再自動計算，可清空後由系統重算）';
+  }
   function calcWash() {
+    var hint = document.getElementById('tx-wash-hint');
+    if (_washManual) {
+      if (hint) hint.textContent = '已手動輸入（不再自動計算，可清空後由系統重算）';
+      return;
+    }
     var up = parseFloat(document.getElementById('tx-up').value) || 0;
     var down = parseFloat(document.getElementById('tx-down').value) || 0;
     var washEl = document.getElementById('tx-wash');
     if (washEl) washEl.value = fmtNum(up + down);
+    if (hint) hint.textContent = '自動 = 客上 + 客下（洗碼可手動覆寫）';
   }
 
+  // v1.9.4 開銷預設匯率 = 當月設定匯率（當月未設定自動沿用最近已設定月份）
+  function _defaultExchangeRate() {
+    try {
+      var m = (typeof TWDate !== 'undefined' && TWDate.todayStr) ? TWDate.todayStr().slice(0, 7) : '';
+      var r = (typeof Settings !== 'undefined' && Settings.getMonthlyRate) ? Settings.getMonthlyRate(m) : null;
+      return (r && r.exchangeRate) || 4.2;
+    } catch (e) { return 4.2; }
+  }
   function addExpenseRow() {
-    _expenseRows.push({ name: '', ticketType: 'other', quantity: 1, unitPrice: 0, amountHK: 0, exchangeRate: 4.2 });
+    _expenseRows.push({ name: '', ticketType: 'other', quantity: 1, unitPrice: 0, amountHK: 0, exchangeRate: _defaultExchangeRate() });
     renderExpenseRows();
   }
   function renderExpenseRows() {
@@ -6838,7 +6910,7 @@ var MemberPage = (function() {
       }
       html += '<input type="number" step="1" min="1" placeholder="數量" class="form-input" style="width:60px;flex:0 0 60px;" value="' + (row.quantity || 1) + '" oninput="MemberPage._updExp(' + i + ',\'quantity\',this.value)">';
       html += '<input type="number" placeholder="金額" class="form-input exp-amt" style="width:80px;flex:0 0 80px;" value="' + (row.amountHK || 0) + '" onchange="MemberPage._updExp(' + i + ',\'amountHK\',this.value)">';
-      html += '<input type="number" step="0.01" placeholder="匯率" class="form-input" style="width:60px;flex:0 0 60px;" value="' + (row.exchangeRate || 4.2) + '" onchange="MemberPage._updExp(' + i + ',\'exchangeRate\',this.value)">';
+      html += '<input type="number" step="0.01" placeholder="匯率" class="form-input" style="width:60px;flex:0 0 60px;" value="' + (row.exchangeRate || _defaultExchangeRate()) + '" onchange="MemberPage._updExp(' + i + ',\'exchangeRate\',this.value)">';
       html += '<button class="btn-sm btn-danger" onclick="MemberPage._delExp(' + i + ')" style="flex:0 0 32px;padding:4px;">×</button>';
       html += '</div>';
       // 非其他時顯示單價提示（房費不顯示）
@@ -6920,7 +6992,8 @@ var MemberPage = (function() {
       agentId: trip.agentId || m.agentId,
       shareholderId: m.shareholderId || trip.shareholderId,
       vipHallId: document.getElementById('tx-hall').value,
-      date: TWDate.todayStr(),
+      date: (document.getElementById('tx-date') && document.getElementById('tx-date').value) || TWDate.todayStr(),
+      source: 'manual', // v1.9.4 帳務來源標示（manual=手輸 / bot=BOT自動結帳），供核帳與多端同步辨識
       outCode: parseFloat(document.getElementById('tx-out').value) || 0,
       backCode: parseFloat(document.getElementById('tx-back').value) || 0,
       washCode: parseFloat(document.getElementById('tx-wash').value) || 0,
@@ -6946,6 +7019,7 @@ var MemberPage = (function() {
     var tx = MemberTxs.getById(txId);
     if (!tx) return;
     _expenseRows = (tx.expenses || []).map(function(e) { return Object.assign({}, e); });
+    _washManual = false; // v1.9.4 重置洗碼手動鎖
 
     var html = '<div class="form-group"><label>會員: ' + tx.memberId + '</label></div>';
     html += '<div class="form-group"><label>貴賓廳</label>';
@@ -6965,8 +7039,9 @@ var MemberPage = (function() {
     html += '<div class="form-row">';
     html += '<div class="form-group"><label>客上(萬)</label><input type="number" inputmode="decimal" step="0.001" id="tx-up" class="form-input" value="' + fmtNum(tx.customerUp || 0) + '" oninput="MemberPage.calcWash()"></div>';
     html += '<div class="form-group"><label>客下(萬)</label><input type="number" inputmode="decimal" step="0.001" id="tx-down" class="form-input" value="' + fmtNum(tx.customerDown || 0) + '" oninput="MemberPage.calcWash()"></div>';
-    html += '<div class="form-group"><label>洗碼(萬)</label><input type="number" inputmode="decimal" step="0.001" id="tx-wash" class="form-input" value="' + fmtNum(tx.washCode || 0) + '"></div>';
+    html += '<div class="form-group"><label>洗碼(萬)</label><input type="number" inputmode="decimal" step="0.001" id="tx-wash" class="form-input" value="' + fmtNum(tx.washCode || 0) + '" oninput="MemberPage._markWashManual()"></div>';
     html += '</div>';
+    html += '<div id="tx-wash-hint" style="font-size:12px;color:var(--text-muted);margin:-4px 0 8px;">自動 = 客上 + 客下（洗碼可手動覆寫）</div>';
     html += '<div class="form-row">';
     html += '<div class="form-group"><label>倍率1</label><input type="number" inputmode="decimal" step="0.01" id="tx-rate1" class="form-input" value="' + (tx.rate1 || 0) + '"></div>';
     html += '<div class="form-group"><label>返水1</label><input type="number" inputmode="decimal" step="0.001" id="tx-rebate1" class="form-input" value="' + (tx.rebate1 || 0) + '"></div>';
@@ -7051,7 +7126,7 @@ var MemberPage = (function() {
     showAddTx: showAddTx, saveTx: saveTx, onMemberChange: onMemberChange, showAddAgent: showAddAgent, delAgent: delAgent,
     editTx: editTx, saveEditTx: saveEditTx, delTx: delTx, copyTx: copyTx,
     addExpenseRow: addExpenseRow, _updExp: _updExp, _updExpType: _updExpType, _delExp: _delExp,
-    calcUpDown: calcUpDown, calcWash: calcWash,
+    calcUpDown: calcUpDown, calcWash: calcWash, _markWashManual: _markWashManual,
     _onMemberSearchFocus: _onMemberSearchFocus, _onMemberSearchInput: _onMemberSearchInput, _selectMember: _selectMember,
     markPending: markPending,
   };
