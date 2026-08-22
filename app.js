@@ -693,6 +693,7 @@ var Schema = (function() {
     trips: {
       id: 's!', shareholderId: 's', agentId: 's',
       startDate: 'd', endDate: 'd', status: 's',
+      visitDate: 'd', hotelNote: 's', // v1.9.0 預計前往日 + 預計酒店（客戶通知階段）
       hallIds: 'a', memberIds: 'a', notes: 's', sealedMonth: 's',
     },
     memberTxs: {
@@ -3248,6 +3249,8 @@ var Trips = (function() {
       hallIds: data.hallIds || [],
       memberIds: data.memberIds || [],
       startDate: TWDate.todayStr(),
+      visitDate: data.visitDate || TWDate.todayStr(), // v1.9.0 預計前往日
+      hotelNote: data.hotelNote || '',                 // v1.9.0 預計酒店（客戶通知時記錄）
       endDate: null,
       status: TRIP_STATUS.ACTIVE,
       lastSettlementDate: null,
@@ -5096,6 +5099,8 @@ var PdfExport = (function() {
     if (!trip) return '';
     var parts = [];
     parts.push('團號: ' + trip.id);
+    if (trip.visitDate) parts.push('預計前往: ' + trip.visitDate); // v1.9.0
+    if (trip.hotelNote) parts.push('預計酒店: ' + trip.hotelNote);  // v1.9.0
     if (trip.startDate) parts.push('開始: ' + trip.startDate);
     if (trip.endDate) parts.push('結束: ' + trip.endDate);
     if (trip.lastSettlementDate) parts.push('最後結算: ' + trip.lastSettlementDate);
@@ -5228,6 +5233,74 @@ var PdfExport = (function() {
     exportAgent: exportAgent,
     exportShareholder: exportShareholder,
   };
+})();
+
+
+// === src/ui/tripPicker.js ===
+/**
+ * ui/tripPicker.js — v1.9.0 共用團選擇器（搜尋式彈窗）
+ * 原生 select 在手機上是全螢幕滾輪，團一多難滾；改為按鈕＋Modal 搜尋列表
+ * 用法：TripPicker.open(currentTripId, function(tripId){ ... })
+ */
+var TripPicker = (function() {
+  var _cb = null;
+  var _currentId = '';
+
+  function open(currentId, cb) {
+    _cb = cb;
+    _currentId = currentId || '';
+    var html = '';
+    html += '<div class="form-group"><input type="text" id="tp-search" class="form-input" placeholder="搜尋團號 / 股東 / 酒店 / 備註..." oninput="TripPicker._filter(this.value)" autocomplete="off"></div>';
+    html += '<div id="tp-list" class="tp-list">' + _buildRows('') + '</div>';
+    Modal.open('選擇團', html);
+    var searchEl = document.getElementById('tp-search');
+    if (searchEl && searchEl.focus) setTimeout(function() { try { searchEl.focus(); } catch (e) {} }, 80);
+  }
+
+  function _buildRows(q) {
+    q = (q || '').trim().toLowerCase();
+    var trips = Trips.getAll().filter(function(t) { return t.status !== TRIP_STATUS.SEALED; });
+    // 進行中在前、待結帳在後；同組新的在前
+    trips.sort(function(a, b) {
+      var oa = a.status === TRIP_STATUS.ACTIVE ? 0 : 1;
+      var ob = b.status === TRIP_STATUS.ACTIVE ? 0 : 1;
+      if (oa !== ob) return oa - ob;
+      return (b.createdAt || 0) - (a.createdAt || 0);
+    });
+    if (q) {
+      trips = trips.filter(function(t) {
+        var sh = Shareholders.getById(t.shareholderId);
+        var hay = [t.id, sh ? sh.name : '', t.notes || '', t.hotelNote || '', t.visitDate || ''].join(' ').toLowerCase();
+        return hay.indexOf(q) >= 0;
+      });
+    }
+    if (trips.length === 0) return '<div class="tp-empty">找不到符合的團</div>';
+    return trips.slice(0, 50).map(function(t) {
+      var sh = Shareholders.getById(t.shareholderId);
+      var bits = [t.id];
+      if (t.visitDate) bits.push(t.visitDate);
+      if (sh) bits.push(sh.name);
+      if (t.hotelNote) bits.push(t.hotelNote);
+      var stTag = t.status === TRIP_STATUS.PENDING_SETTLEMENT ? '<span class="tp-tag tp-tag-pending">待結帳</span>' : '';
+      var cur = t.id === _currentId ? ' tp-current' : '';
+      return '<div class="tp-row' + cur + '" onclick="TripPicker._pick(\'' + escJs(t.id) + '\')">'
+        + '<span class="tp-name">' + esc(bits.join(' · ')) + '</span>' + stTag + '</div>';
+    }).join('');
+  }
+
+  function _filter(q) {
+    var list = document.getElementById('tp-list');
+    if (list) list.innerHTML = _buildRows(q);
+  }
+
+  function _pick(tripId) {
+    var cb = _cb;
+    _cb = null;
+    Modal.close();
+    if (cb) cb(tripId);
+  }
+
+  return { open: open, _filter: _filter, _pick: _pick };
 })();
 
 
@@ -5464,6 +5537,11 @@ var OverviewPage = (function() {
     var agents = Agents.getAll();
     var members = Members.getAll();
     var html = '';
+    // v1.9.0 預計前往日 + 預計酒店（作業流程第一步：客戶通知日期與酒店）
+    html += '<div class="form-row">';
+    html += '<div class="form-group"><label>預計前往日</label><input type="date" id="trip-visit" class="form-input" value="' + TWDate.todayStr() + '"></div>';
+    html += '<div class="form-group"><label>預計酒店(選填)</label><input type="text" id="trip-hotel" class="form-input" placeholder="例如：銀河"></div>';
+    html += '</div>';
     html += '<div class="form-group"><label>所屬股東</label>';
     html += '<select id="trip-sh" class="form-input">';
     shareholders.forEach(function(sh) {
@@ -5502,27 +5580,43 @@ var OverviewPage = (function() {
     html += '<div class="form-group"><label>備註</label>';
     html += '<input type="text" id="trip-notes" class="form-input"></div>';
     html += '<div class="row-actions">';
-    html += '<button class="btn btn-primary" onclick="OverviewPage.createTrip()">建立</button></div>';
+    html += '<button class="btn btn-primary" id="trip-create-btn" onclick="OverviewPage.createTrip()">建立</button></div>';
     Modal.open('建團', html);
   }
 
+  var _tripCreating = false; // v1.9.0 防重複提交鎖
+
   function createTrip() {
+    if (_tripCreating) return; // v1.9.0 防連點
     var shId = document.getElementById('trip-sh').value;
     var agentId = document.getElementById('trip-agent').value;
     var hallIds = Array.from(document.querySelectorAll('.trip-hall-cb:checked')).map(function(cb) { return cb.value; });
     var memberIds = Array.from(document.querySelectorAll('.trip-member-cb:checked')).map(function(cb) { return cb.value; });
     var notes = document.getElementById('trip-notes').value;
+    var visitEl = document.getElementById('trip-visit');
+    var hotelEl = document.getElementById('trip-hotel');
 
-    var trip = Trips.create({
-      shareholderId: shId,
-      agentId: agentId,
-      hallIds: hallIds,
-      memberIds: memberIds,
-      notes: notes,
-    });
-    Modal.close();
-    Toast.success('團 ' + trip.id + ' 已建立');
-    render();
+    var btn = document.getElementById('trip-create-btn');
+    if (btn) { btn.disabled = true; btn.textContent = '建立中...'; }
+    _tripCreating = true;
+    try {
+      var trip = Trips.create({
+        shareholderId: shId,
+        agentId: agentId,
+        visitDate: visitEl ? visitEl.value : '',
+        hotelNote: hotelEl ? hotelEl.value : '',
+        hallIds: hallIds,
+        memberIds: memberIds,
+        notes: notes,
+      });
+      if (!trip) { Toast.error('建立失敗，請檢查欄位'); return; }
+      Modal.close();
+      Toast.success('團 ' + trip.id + ' 已建立');
+      render();
+    } finally {
+      _tripCreating = false;
+      if (btn) { btn.disabled = false; btn.textContent = '建立'; }
+    }
   }
 
   function toggleAllMembers() {
@@ -5543,6 +5637,11 @@ var OverviewPage = (function() {
     if (!Array.isArray(tripMemberIds)) tripMemberIds = Object.values(tripMemberIds);
     var html = '';
     html += '<div class="form-group"><label>團ID</label><input type="text" class="form-input" value="' + trip.id + '" disabled></div>';
+    // v1.9.0 預計前往日 + 預計酒店
+    html += '<div class="form-row">';
+    html += '<div class="form-group"><label>預計前往日</label><input type="date" id="trip-visit-edit" class="form-input" value="' + (trip.visitDate || TWDate.todayStr()) + '"></div>';
+    html += '<div class="form-group"><label>預計酒店(選填)</label><input type="text" id="trip-hotel-edit" class="form-input" value="' + escAttr(trip.hotelNote || '') + '"></div>';
+    html += '</div>';
     html += '<div class="form-group"><label>所屬股東</label>';
     html += '<select id="trip-sh-edit" class="form-input">';
     shareholders.forEach(function(sh) {
@@ -5594,9 +5693,13 @@ var OverviewPage = (function() {
     var hallIds = Array.from(document.querySelectorAll('.trip-hall-cb-edit:checked')).map(function(cb) { return cb.value; });
     var memberIds = Array.from(document.querySelectorAll('.trip-member-cb-edit:checked')).map(function(cb) { return cb.value; });
     var notes = document.getElementById('trip-notes-edit').value;
+    var visitEl = document.getElementById('trip-visit-edit');
+    var hotelEl = document.getElementById('trip-hotel-edit');
     Trips.update(tripId, {
       shareholderId: shId,
       agentId: agentId,
+      visitDate: visitEl ? visitEl.value : '',
+      hotelNote: hotelEl ? hotelEl.value : '',
       hallIds: hallIds,
       memberIds: memberIds,
       notes: notes,
@@ -5806,6 +5909,8 @@ var PendingPage = (function() {
     html += '<div class="mb-ap-stat"><label>訂房數</label><span>' + roomNights + ' 晚</span></div>';
     html += '<div class="mb-ap-stat"><label>會員數</label><span>' + memberCount + '</span></div>';
     html += '</div>';
+    // v1.9.0 分享明細（發給上級代理/股東）＋歸檔封存
+    html += '<button class="btn btn-primary" onclick="PendingPage.shareTrip(\'' + trip.id + '\')">分享明細</button>';
     html += '<button class="btn btn-danger" onclick="PendingPage.sealTrip(\'' + trip.id + '\')">歸檔封存</button>';
     html += '</div>';
 
@@ -5918,6 +6023,101 @@ var PendingPage = (function() {
     Modal.open('會員明細', html);
   }
 
+  // v1.9.0 分享團明細 — 作業流程最後一步：確認帳務無誤後發給上級代理/股東
+  // iOS：navigator.share 調出系統分享面板（可直接選微信）；不支援則複製到剪貼板
+  function shareTrip(tripId) {
+    var trip = Trips.getById(tripId);
+    if (!trip) { Toast.error('找不到團'); return; }
+    var sh = Shareholders.getById(trip.shareholderId);
+    var ag = trip.agentId ? Agents.getById(trip.agentId) : null;
+    var mtxs = MemberTxs.getByTrip(tripId);
+    var supplements = Supplements.getByTrip(tripId);
+
+    // 訂房口徑與 buildTripCard 一致：按代理匹配
+    var allBookings = Bookings.getAll();
+    var tripAgentIds = {};
+    mtxs.forEach(function(tx) {
+      var aid = tx.agentId || (trip.agentId || '');
+      if (aid) tripAgentIds[aid] = true;
+    });
+    if (trip.agentId) tripAgentIds[trip.agentId] = true;
+    var bookings = allBookings.filter(function(b) {
+      var bAgentId = b.agentId;
+      if (!bAgentId && b.tripId) {
+        var tr = Trips.getById(b.tripId);
+        bAgentId = tr ? (tr.agentId || '') : '';
+      }
+      return bAgentId && tripAgentIds[bAgentId];
+    });
+
+    var totalWash = mtxs.reduce(function(s, t) { return s + (t.washCode || 0); }, 0);
+    var totalSettle = mtxs.reduce(function(s, t) { return s + calcTotalNT(t); }, 0);
+    var roomNights = bookings.reduce(function(s, b) { return s + (b.nights || 1); }, 0);
+    var supPending = supplements.filter(function(s) { return s.status === 'pending'; })
+      .reduce(function(s, sup) { return s + (sup.settlementAmount || 0); }, 0);
+
+    // 按會員分組（同卡片匯總表）
+    var memberGroups = {};
+    mtxs.forEach(function(tx) {
+      var mid = tx.memberId;
+      if (!memberGroups[mid]) memberGroups[mid] = { totalSettle: 0, hallName: '' };
+      memberGroups[mid].totalSettle += calcTotalNT(tx);
+      if (!memberGroups[mid].hallName) memberGroups[mid].hallName = getHallName(tx, trip);
+    });
+
+    var lines = [];
+    lines.push('【團 ' + trip.id + ' 結帳明細】');
+    var head = [];
+    head.push('股東: ' + (sh ? sh.name : '-'));
+    if (ag) head.push('代理: ' + ag.name);
+    if (trip.visitDate) head.push('前往日: ' + trip.visitDate);
+    if (trip.hotelNote) head.push('酒店: ' + trip.hotelNote);
+    lines.push(head.join(' | '));
+    lines.push('會員 ' + mtxs.length + ' 筆 · 洗碼 ' + fmtCardNum(totalWash) + ' 萬 · 訂房 ' + roomNights + ' 晚');
+    if (supPending > 0) lines.push('待補帳 NT$ ' + fmtCardNum(Math.round(supPending)));
+    if (mtxs.length > 0) {
+      lines.push('──── 會員明細 ────');
+      Object.keys(memberGroups).forEach(function(mid) {
+        var g = memberGroups[mid];
+        var m = Members.getById(mid);
+        lines.push((m ? maskName(m.name) : mid) + '（' + g.hallName + '）交收 NT$ ' + fmtCardNum(Math.round(g.totalSettle)));
+      });
+      lines.push('──── 合計 NT$ ' + fmtCardNum(Math.trunc(totalSettle / 100) * 100) + ' ────');
+    } else {
+      lines.push('此團尚無帳務記錄');
+    }
+    if (trip.notes) lines.push('備註: ' + trip.notes);
+
+    _shareText('團 ' + trip.id + ' 結帳明細', lines.join('\n'));
+  }
+
+  function _shareText(title, text) {
+    if (navigator.share) {
+      navigator.share({ title: title, text: text }).catch(function() { /* 用戶取消，不打擾 */ });
+      return;
+    }
+    // fallback：複製到剪貼板（老版 iOS）
+    function fallbackCopy() {
+      var ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.focus(); ta.select();
+      var ok = false;
+      try { ok = document.execCommand('copy'); } catch (e) {}
+      document.body.removeChild(ta);
+      Toast[ok ? 'success' : 'error'](ok ? '已複製明細，可貼到微信發送' : '複製失敗，請截圖');
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function() {
+        Toast.success('已複製明細，可貼到微信發送');
+      }, fallbackCopy);
+    } else {
+      fallbackCopy();
+    }
+  }
+
   function sealTrip(tripId) {
     Modal.confirm('封存後不可修改，確定要封存團 ' + tripId + '？', function() {
       Trips.sealTrip(tripId);
@@ -5926,7 +6126,7 @@ var PendingPage = (function() {
     });
   }
 
-  return { render: render, sealTrip: sealTrip, toggleCard: toggleCard, showMemberDetail: showMemberDetail };
+  return { render: render, sealTrip: sealTrip, toggleCard: toggleCard, showMemberDetail: showMemberDetail, shareTrip: shareTrip };
 })();
 
 
@@ -5974,7 +6174,6 @@ var MemberPage = (function() {
   }
 
   function buildTransactionsHtml() {
-    var trips = Trips.getAll().filter(function(t) { return t.status !== TRIP_STATUS.SEALED; });
     var html = '';
 
     // 团选择器 + 代理筛选
@@ -5982,13 +6181,12 @@ var MemberPage = (function() {
     html += '<div class="card-header"><h3>帳務</h3>';
     html += '<button class="btn btn-primary ml-sm" onclick="MemberPage.showAddAgent()">+ 新增代理</button>';
     html += '<div style="display:flex;gap:8px;align-items:center;margin-left:auto;">';
-    html += '<select id="member-trip-select" class="form-input auto-width" onchange="MemberPage.selectTrip(this.value)">';
-    html += '<option value="">選擇團...</option>';
-    trips.forEach(function(trip) {
-      var sh = Shareholders.getById(trip.shareholderId);
-      html += '<option value="' + trip.id + '"' + (_selectedTrip === trip.id ? ' selected' : '') + '>' + trip.id + ' - ' + (sh ? sh.name : '') + (trip.status === TRIP_STATUS.PENDING_SETTLEMENT ? ' (待結帳)' : '') + '</option>';
-    });
-    html += '</select>';
+    // v1.9.0 團選擇器改搜尋式彈窗（原生 select 手機上是滾輪，難用）
+    var _curTrip = _selectedTrip ? Trips.getById(_selectedTrip) : null;
+    var _tripBtnLabel = _curTrip
+      ? (_curTrip.id + (_curTrip.status === TRIP_STATUS.PENDING_SETTLEMENT ? ' (待結帳)' : ''))
+      : '選擇團...';
+    html += '<button type="button" class="trip-select-btn" onclick="TripPicker.open(\'' + escJs(_selectedTrip || '') + '\', MemberPage.selectTrip)">' + esc(_tripBtnLabel) + ' ▾</button>';
     // 代理筛选
     if (_selectedTrip) {
       var tripObj = Trips.getById(_selectedTrip);
@@ -5999,16 +6197,18 @@ var MemberPage = (function() {
         html += '<option value="' + ag.id + '"' + (_selectedAgent === ag.id ? ' selected' : '') + '>' + esc(ag.name) + '</option>';
       });
       html += '</select>';
-      // 送入待結帳按鈕（僅 ACTIVE 狀態顯示）
-      if (tripObj && tripObj.status === TRIP_STATUS.ACTIVE) {
-        html += '<button class="btn btn-warning" onclick="MemberPage.markPending(\'' + _selectedTrip + '\')">送入待結帳</button>';
-      }
     }
     html += '</div>';
     html += '</div>';
 
     if (_selectedTrip) {
       var trip = Trips.getById(_selectedTrip);
+      // v1.9.0 「送入待結帳」改為醒目大按鈕（原本擠在 header 小行，手機上難找難按）
+      if (trip && trip.status === TRIP_STATUS.ACTIVE) {
+        html += '<div class="mark-pending-bar">';
+        html += '<button class="btn btn-warning mark-pending-btn" onclick="MemberPage.markPending(\'' + _selectedTrip + '\')">收款完成 · 送入待結帳</button>';
+        html += '</div>';
+      }
       var mtxs = MemberTxs.getByTrip(_selectedTrip);
       // 依代理篩選
       if (_selectedAgent) {
@@ -6838,7 +7038,6 @@ var RoomPage = (function() {
 
   function render() {
     var allTrips = Trips.getAll();
-    var trips = allTrips.filter(function(t) { return t.status !== TRIP_STATUS.SEALED; });
     var sealedTripIds = new Set(allTrips.filter(function(t) { return t.status === TRIP_STATUS.SEALED; }).map(function(t) { return t.id; }));
 
     /* 若當前選中的團已被封存，清除選擇 */
@@ -6876,13 +7075,10 @@ var RoomPage = (function() {
     html += '<div class="card">';
     html += '<div class="card-header" style="justify-content:center;gap:16px;"><h3>房務管理</h3>';
     html += '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">';
-    html += '<select id="room-trip-select" class="form-input auto-width" onchange="RoomPage.selectTrip(this.value)">';
-    html += '<option value="">全部訂房</option>';
-    trips.forEach(function(trip) {
-      var sh = Shareholders.getById(trip.shareholderId);
-      html += '<option value="' + trip.id + '"' + (_selectedTrip === trip.id ? ' selected' : '') + '>' + trip.id + ' - ' + (sh ? sh.name : '') + '</option>';
-    });
-    html += '</select>';
+    // v1.9.0 團選擇器改搜尋式彈窗
+    var _rCurTrip = _selectedTrip ? Trips.getById(_selectedTrip) : null;
+    var _rTripBtnLabel = _rCurTrip ? _rCurTrip.id : '全部訂房';
+    html += '<button type="button" class="trip-select-btn" onclick="TripPicker.open(\'' + escJs(_selectedTrip || '') + '\', RoomPage.selectTrip)">' + esc(_rTripBtnLabel) + ' ▾</button>';
     html += '<button class="btn" style="background:var(--bg-tertiary);color:var(--text-primary);" onclick="RoomPage.showHotelConfig()">\u2699\uFE0F 酒店設定</button>';
     if (_selectedTrip) {
       html += '<button class="btn btn-primary" onclick="RoomPage.showAddBooking()">+ 新增訂房</button>';
@@ -7261,7 +7457,12 @@ var RoomPage = (function() {
     html += '<div class="form-group"><label>客人姓名</label><input type="text" id="bk-guest" class="form-input"></div>';
     html += '<div class="form-group"><label>代理(必選)</label>';
     html += '<select id="bk-agent" class="form-input">';
-    agents.forEach(function(a) { html += '<option value="' + a.id + '">' + esc(a.name) + '</option>'; });
+    // v1.9.0 預選當前團的所屬代理（建團時已選過，不必重選）
+    var defaultAgentId = trip.agentId || '';
+    agents.forEach(function(a) {
+      var sel = a.id === defaultAgentId ? ' selected' : '';
+      html += '<option value="' + a.id + '"' + sel + '>' + esc(a.name) + '</option>';
+    });
     html += '</select></div>';
     html += '</div>';
 
@@ -7337,6 +7538,11 @@ var RoomPage = (function() {
     if (hidden) hidden.value = memberId || '';
     if (search) search.value = m ? ((m.name || '') + ' (' + (m.id || '') + ')') : '';
     if (dd) dd.style.display = 'none';
+    // v1.9.0 新增訂房時選了關聯會員 → 客人姓名空著就自動帶會員名（免打字、免打錯字）
+    if (prefix === 'bk' && m) {
+      var guest = document.getElementById('bk-guest');
+      if (guest && !guest.value.trim()) guest.value = m.name || '';
+    }
   }
 
   function onCasinoChange() {
@@ -7942,7 +8148,7 @@ var FeesPage = (function() {
     html += '<select id="fees-trip-select" class="form-input auto-width" onchange="FeesPage.selectTrip(this.value)">';
     html += '<option value="">選擇團...</option>';
     trips.forEach(function(t) {
-      html += '<option value="' + t.id + '"' + (_selectedTrip === t.id ? ' selected' : '') + '>' + t.id + ' ' + esc(t.note || '') + '</option>';
+      html += '<option value="' + t.id + '"' + (_selectedTrip === t.id ? ' selected' : '') + '>' + t.id + ' ' + esc(t.notes || '') + '</option>';
     });
     html += '</select></div></div></div>';
 
@@ -8316,7 +8522,7 @@ var ProfitPage = (function() {
     html += '<select id="profit-trip-select" class="form-input auto-width" onchange="ProfitPage.selectTrip(this.value)">';
     html += '<option value="">選擇團...</option>';
     trips.forEach(function(t) {
-      html += '<option value="' + t.id + '"' + (_selectedTrip === t.id ? ' selected' : '') + '>' + t.id + ' ' + (t.note || '') + '</option>';
+      html += '<option value="' + t.id + '"' + (_selectedTrip === t.id ? ' selected' : '') + '>' + t.id + ' ' + (t.notes || '') + '</option>';
     });
     html += '</select></div></div></div>';
 
@@ -9754,12 +9960,23 @@ var MembersMgmtPage = (function() {
     });
   }
 
+  // v1.9.0 自動建議會員編號：M + 日期 + 當日序號（可直接改）
+  function _suggestMemberId() {
+    var dateStr = TWDate.todayStr().replace(/-/g, '');
+    var prefix = 'M' + dateStr;
+    var n = 1;
+    var existing = {};
+    Members.getAll().forEach(function(m) { existing[m.id] = true; });
+    while (existing[prefix + String(n).padStart(2, '0')]) n++;
+    return prefix + String(n).padStart(2, '0');
+  }
+
   function showAdd() {
     var agents = Agents.getAll();
     var shareholders = Shareholders.getAll();
     var html = '';
     html += '<div class="form-row">';
-    html += '<div class="form-group"><label>會員編號</label><input type="text" id="m-id" class="form-input"></div>';
+    html += '<div class="form-group"><label>會員編號</label><input type="text" id="m-id" class="form-input" value="' + _suggestMemberId() + '"></div>';
     html += '<div class="form-group"><label>客稱</label><input type="text" id="m-name" class="form-input"></div>';
     html += '<div class="form-group"><label>賭場編號</label><input type="text" id="m-casino" class="form-input"></div>';
     html += '</div>';
@@ -9780,7 +9997,7 @@ var MembersMgmtPage = (function() {
     html += '<div class="form-group"><label>返水2</label><input type="number" step="0.001" id="m-rebate2" class="form-input" value="0.018"></div>';
     html += '</div>';
     html += '<div class="row-actions">';
-    html += '<button class="btn btn-primary" onclick="MembersMgmtPage.saveMember()">儲存</button></div>';
+    html += '<button class="btn btn-primary" id="m-save-btn" onclick="MembersMgmtPage.saveMember()">儲存</button></div>';
     Modal.open('新增會員', html);
   }
 
@@ -9792,9 +10009,12 @@ var MembersMgmtPage = (function() {
     if (shId) shSelect.value = shId;
   }
 
+  var _memberSaving = false; // v1.9.0 防重複提交鎖
+
   function saveMember() {
+    if (_memberSaving) return;
     var data = {
-      id: document.getElementById('m-id').value,
+      id: document.getElementById('m-id').value.trim(),
       name: document.getElementById('m-name').value,
       casinoId: document.getElementById('m-casino').value,
       agentId: document.getElementById('m-agent').value,
@@ -9806,10 +10026,19 @@ var MembersMgmtPage = (function() {
       status: MEMBER_STATUS.COMPLETE,
     };
     if (!data.id || !data.name) { Toast.error('會員編號和客稱必填'); return; }
-    Members.create(data);
-    Modal.close();
-    Toast.success('會員已建立');
-    render();
+    if (Members.getById(data.id)) { Toast.error('會員編號 ' + data.id + ' 已存在，請換一個'); return; } // v1.9.0 防重複
+    var btn = document.getElementById('m-save-btn');
+    if (btn) { btn.disabled = true; btn.textContent = '儲存中...'; }
+    _memberSaving = true;
+    try {
+      Members.create(data);
+      Modal.close();
+      Toast.success('會員已建立');
+      render();
+    } finally {
+      _memberSaving = false;
+      if (btn) { btn.disabled = false; btn.textContent = '儲存'; }
+    }
   }
 
   function editMember(id) {
@@ -10923,26 +11152,40 @@ var ReportsPage = (function() {
 
   function render() {
     var trips = Trips.getAll();
-    var activeTrips = trips.filter(function(t) { return t.status === 'active'; });
+    // v1.9.0 全部團皆可選（結帳後發給股東的團是 pending_settlement/sealed，原本只列 active 會選不到）
+    // 排序：進行中 → 待結帳 → 已封存；同狀態新的在前
+    var ST_ORDER = { active: 0, pending_settlement: 1, sealed: 2 };
+    var ST_LABEL = { active: '進行中', pending_settlement: '待結帳', sealed: '已封存' };
+    var allTrips = trips.slice().sort(function(a, b) {
+      var oa = ST_ORDER[a.status] !== undefined ? ST_ORDER[a.status] : 3;
+      var ob = ST_ORDER[b.status] !== undefined ? ST_ORDER[b.status] : 3;
+      if (oa !== ob) return oa - ob;
+      return (b.createdAt || 0) - (a.createdAt || 0);
+    });
 
     var html = '';
     html += '<div class="reports-page">';
 
     // 團選擇
-    html += '<div class="card" class="mb-md">';
+    html += '<div class="card mb-md">';
     html += '<div class="card-header"><h3>選擇團（匯出範圍）</h3></div>';
     html += '<div class="card-body">';
     html += '<select id="rpt-trip-select" class="form-input" onchange="ReportsPage.selectTrip(this.value)">';
     html += '<option value="">全部團</option>';
-    activeTrips.forEach(function(t) {
-      var label = t.id + ' ' + (t.note || '');
+    allTrips.forEach(function(t) {
+      // v1.9.0 修正 t.note → t.notes；label 帶狀態與預計前往日
+      var bits = [t.id];
+      if (t.visitDate) bits.push(t.visitDate);
+      if (t.hotelNote) bits.push(t.hotelNote);
+      if (t.notes) bits.push(t.notes);
+      var label = bits.join(' ') + '（' + (ST_LABEL[t.status] || t.status) + '）';
       html += '<option value="' + t.id + '"' + (_selectedTrip === t.id ? ' selected' : '') + '>' + esc(label) + '</option>';
     });
     html += '</select>';
     html += '</div></div>';
 
     // PDF 報表區
-    html += '<div class="card" class="mb-md">';
+    html += '<div class="card mb-md">';
     html += '<div class="card-header"><h3>PDF 報表</h3></div>';
     html += '<div class="card-body">';
     html += '<div class="reports-grid">';
@@ -10970,7 +11213,7 @@ var ReportsPage = (function() {
     html += '</div></div></div>';
 
     // 數據備份區
-    html += '<div class="card" class="mb-md">';
+    html += '<div class="card mb-md">';
     html += '<div class="card-header"><h3>數據備份</h3></div>';
     html += '<div class="card-body">';
     html += '<div class="reports-grid">';
