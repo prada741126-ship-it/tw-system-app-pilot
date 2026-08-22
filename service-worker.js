@@ -6,7 +6,7 @@
  *   - 其他 → stale-while-revalidate
  */
 
-var CACHE_VERSION = 'tw-app-v1.6.0';  // 2026-08-22 手機操作體驗優化：彈窗底部滑出、寬表格卡片化、會員搜尋＋最近使用、訂房必填驗證
+var CACHE_VERSION = 'tw-app-v1.7.0';  // 2026-08-22 快速操作優化：會員搜尋選擇器＋最近使用、防重複提交鎖、總覽快捷列、複製上一筆、千分位、下拉刷新、Toast 可點掉
 var STATIC_CACHE = CACHE_VERSION + '-static';
 var RUNTIME_CACHE = CACHE_VERSION + '-runtime';
 
