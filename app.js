@@ -6715,18 +6715,32 @@ var MemberPage = (function() {
     return html;
   }
 
+  // v1.9.6 帳務會員選擇器只列本團會員（建團時未勾任何會員才退回全部）
+  function _tripMemberPool() {
+    var trip = Trips.getById(_selectedTrip);
+    var ids = trip ? (trip.memberIds || []) : [];
+    if (!Array.isArray(ids)) ids = Object.values(ids);
+    var pool = ids.map(function(id) { return Members.getById(id); }).filter(Boolean);
+    if (pool.length === 0) pool = Members.getAll();
+    return pool;
+  }
+
   function showAddTx(prefillTx) {
     var trip = Trips.getById(_selectedTrip);
     if (!trip) return;
-    var members = Members.getAll();
+    var members = _tripMemberPool();
+    var poolIds = members.map(function(m) { return m.id; });
     // v1.7.0 預設帶入最近使用會員（而非 members[0]）
+    // v1.9.6 限定本團會員：最近使用只挑有納入本團的
     var recentIds = RecentMembers.getList();
     var defaultM = null;
     if (prefillTx && prefillTx.memberId) {
       defaultM = Members.getById(prefillTx.memberId);
     }
     if (!defaultM && recentIds.length > 0) {
-      defaultM = Members.getById(recentIds[0]);
+      for (var ri = 0; ri < recentIds.length; ri++) {
+        if (poolIds.indexOf(recentIds[ri]) >= 0) { defaultM = Members.getById(recentIds[ri]); break; }
+      }
     }
     if (!defaultM && members.length > 0) {
       defaultM = members[0];
@@ -6740,7 +6754,7 @@ var MemberPage = (function() {
     html += '<div class="form-group"><label>會員</label>';
     html += '<div class="member-picker" style="position:relative;">';
     html += '<input type="hidden" id="tx-member" value="' + escAttr(defaultMemberId) + '">';
-    html += '<input type="text" id="tx-member-search" class="form-input" placeholder="搜尋會員（名字或編號）..." value="' + escAttr(defaultM.name || '') + ' (' + escAttr(defaultM.id || '') + ')"';
+    html += '<input type="text" id="tx-member-search" class="form-input" placeholder="搜尋本團會員（名字或編號）..." value="' + escAttr(defaultM.name || '') + ' (' + escAttr(defaultM.id || '') + ')"';
     html += ' onfocus="MemberPage._onMemberSearchFocus(this)" oninput="MemberPage._onMemberSearchInput(this.value)" autocomplete="off">';
     html += '<div id="tx-member-dropdown" class="member-picker-dropdown" style="display:none;"></div>';
     html += '</div></div>';
@@ -6794,7 +6808,7 @@ var MemberPage = (function() {
   function _renderMemberDropdown(query) {
     var dd = document.getElementById('tx-member-dropdown');
     if (!dd) return;
-    var members = Members.getAll();
+    var members = _tripMemberPool(); // v1.9.6 只列本團會員
     var q = (query || '').trim().toLowerCase();
     var filtered = members.filter(function(m) {
       if (!q) return true;
@@ -6810,7 +6824,7 @@ var MemberPage = (function() {
       return 0;
     });
     if (filtered.length === 0) {
-      dd.innerHTML = '<div class="member-picker-item member-picker-empty">找不到會員</div>';
+      dd.innerHTML = '<div class="member-picker-item member-picker-empty">找不到會員（僅列出本團 ' + members.length + ' 位會員，如需新增請先於建團/編輯團勾選）</div>';
     } else {
       dd.innerHTML = filtered.slice(0, 20).map(function(m) {
         return '<div class="member-picker-item" onclick="MemberPage._selectMember(\'' + escJs(m.id) + '\')">'
