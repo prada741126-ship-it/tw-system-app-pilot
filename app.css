@@ -2050,3 +2050,51 @@ input, select, textarea { font-size: 16px; }
   }
   .modal-box .row-actions .btn + .btn { margin-top: 8px; }
 }
+
+/* ==========================================================================
+   v1.9.0 TripPicker 共用團選擇器（搜尋式彈窗）
+   ========================================================================== */
+.trip-select-btn {
+  padding: 8px 14px;
+  border: 1px solid var(--border, #ddd);
+  border-radius: var(--radius, 8px);
+  background: var(--bg-secondary, #fff);
+  color: var(--text-primary, #222);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.trip-select-btn:active { background: var(--bg-tertiary, #f0f0f0); }
+
+.tp-list { max-height: 320px; overflow-y: auto; border: 1px solid var(--border, #eee); border-radius: var(--radius, 8px); }
+.tp-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 12px 14px; cursor: pointer; border-bottom: 1px solid var(--border, #eee);
+}
+.tp-row:last-child { border-bottom: none; }
+.tp-row:active, .tp-row:hover { background: var(--bg-tertiary, #f5f5f5); }
+.tp-row.tp-current { background: var(--accent-soft, #e8f0fe); }
+.tp-name { font-size: 15px; font-weight: 600; color: var(--text-primary, #222); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tp-tag { flex: 0 0 auto; font-size: 12px; padding: 2px 8px; border-radius: 10px; font-weight: 600; }
+.tp-tag-pending { background: #fff3cd; color: #8a6d3b; }
+.tp-empty { color: var(--text-muted, #999); padding: 18px; text-align: center; }
+
+/* ==========================================================================
+   v1.9.0 送入待結帳大按鈕（原本擠在 header 小行，手機難找）
+   ========================================================================== */
+.mark-pending-bar { padding: 0 0 12px 0; }
+.mark-pending-btn {
+  width: 100%;
+  padding: 14px 12px;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+/* ==========================================================================
+   v1.9.0 待結帳卡片操作按鈕（分享明細 + 歸檔封存）手機全寬
+   ========================================================================== */
+@media (max-width: 768px) {
+  .pd-card-footer { display: flex; flex-direction: column; gap: 8px; }
+  .pd-card-footer .btn { width: 100%; padding: 14px 12px; font-size: 16px; }
+}
