@@ -6,7 +6,7 @@
  *   - 其他 → stale-while-revalidate
  */
 
-var CACHE_VERSION = 'tw-app-v1.4.0';  // 2026-08-22 手機 App 式底部標籤列（總覽/待結帳/帳務/房務+更多），修掉 480px 以下標籤文字被隱藏的問題
+var CACHE_VERSION = 'tw-app-v1.4.1';  // 2026-08-22 修：HTML 多餘 </div> → #app 提前關閉；標籤文字 display:block；手機頂部留白縮減
 var STATIC_CACHE = CACHE_VERSION + '-static';
 var RUNTIME_CACHE = CACHE_VERSION + '-runtime';
 
