@@ -1803,13 +1803,18 @@ input, select, textarea { font-size: 16px; }
   }
   .tab-btn .nav-icon { margin: 0; font-size: 0; }
   .tab-btn .nav-icon svg { width: 26px; height: 26px; }
-  .tab-btn .nav-label { font-size: 11px; line-height: 1.2; white-space: nowrap; } /* 文字永遠顯示 */
+  .tab-btn .nav-label { display: block !important; font-size: 11px; line-height: 1.2; white-space: nowrap; font-weight: 500; } /* 文字永遠顯示 */
   .tab-btn.active { color: var(--accent, #c9a84c); background: var(--bg-hover, rgba(0,0,0,0.05)); }
   .tab-btn:active { transform: scale(0.94); }
 
+  .topbar {
+    padding: calc(8px + env(safe-area-inset-top, 0px)) 12px 6px !important;
+    margin-bottom: 8px !important;
+  }
   .main-content {
     margin-left: 0 !important;
     width: 100% !important;
+    padding: 4px 12px 12px !important;
     margin-bottom: calc(78px + env(safe-area-inset-bottom, 0px)) !important;
   }
 }
