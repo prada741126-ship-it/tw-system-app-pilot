@@ -1608,6 +1608,16 @@ if (typeof module !== 'undefined' && module.exports) {
  */
 
 // 比較兩個活記錄是否「資料不同」（忽略 _updatedAt / _reviveAt 自身欄位）
+// v1.9.1 顺序无关的稳定序列化（Firebase 回传的物件键序与本机不同，JSON.stringify 直接比对会造成假性衝突）
+function _stableStringify(v) {
+  if (v === undefined) return 'null';
+  if (v === null || typeof v !== 'object') return JSON.stringify(v) === undefined ? 'null' : JSON.stringify(v);
+  if (Array.isArray(v)) return '[' + v.map(function(x) { return _stableStringify(x); }).join(',') + ']';
+  return '{' + Object.keys(v).sort().map(function(k) {
+    return JSON.stringify(k) + ':' + _stableStringify(v[k]);
+  }).join(',') + '}';
+}
+
 function _dataDiffers(a, b) {
   if (!a || !b) return true;
   var keys = {};
@@ -1615,8 +1625,7 @@ function _dataDiffers(a, b) {
   Object.keys(b).forEach(function(k) { keys[k] = true; });
   for (var k in keys) {
     if (k === '_updatedAt' || k === '_reviveAt') continue;
-    var av = a[k], bv = b[k];
-    if (JSON.stringify(av) !== JSON.stringify(bv)) return true;
+    if (_stableStringify(a[k]) !== _stableStringify(b[k])) return true;
   }
   return false;
 }
@@ -1974,6 +1983,11 @@ var Conflicts = (function() {
    */
   function record(collection, conflicts) {
     if (!conflicts || !conflicts.length) return;
+    // v1.9.1 假性衝突防線：本机与云端资料实质相同（仅键序/时间戳不同）者不记录
+    conflicts = conflicts.filter(function(c) {
+      return c && c.local && c.remote && _dataDiffers(c.local, c.remote);
+    });
+    if (!conflicts.length) return;
     var arr = _load();
     conflicts.forEach(function(c) {
       // 移除同 collection + fbKey 的舊衝突（避免堆疊）
@@ -2068,6 +2082,19 @@ var Conflicts = (function() {
     }
   }
 
+  /** v1.9.1 清除历史假性衝突（本机与云端资料实质相同者，旧版误报留下的记录） */
+  function pruneFalsePositives() {
+    var arr = _load();
+    var kept = arr.filter(function(c) {
+      return _dataDiffers(c.local, c.remote);
+    });
+    if (kept.length < arr.length) {
+      _save(kept);
+      console.log('[Conflicts] Removed ' + (arr.length - kept.length) + ' false-positive conflicts');
+      _emit();
+    }
+  }
+
   return {
     record: record,
     getAll: getAll,
@@ -2075,6 +2102,7 @@ var Conflicts = (function() {
     resolve: resolve,
     clearAll: clearAll,
     prune: prune,
+    pruneFalsePositives: pruneFalsePositives,
     COLLECTION_META: COLLECTION_META,
   };
 })();
@@ -2583,6 +2611,17 @@ var Backup = (function() {
   function _webDownload(filename, text) {
     if (typeof document === 'undefined') return; // Node 測試環境
     var blob = new Blob([text], { type: 'application/json' });
+    // v1.9.1 iOS PWA：優先用系統分享面板（可直接存到「檔案」或傳到微信），
+    // 舊的 a[download] 在 iOS 主畫面模式常無反應
+    if (navigator.share && navigator.canShare) {
+      try {
+        var file = new File([blob], filename, { type: 'application/json' });
+        if (navigator.canShare({ files: [file] })) {
+          navigator.share({ files: [file], title: filename }).catch(function() {});
+          return;
+        }
+      } catch (e) { /* fallthrough */ }
+    }
     var url = URL.createObjectURL(blob);
     var a = document.createElement('a');
     a.href = url;
@@ -5352,7 +5391,7 @@ var OverviewPage = (function() {
     html += '<div class="ov-qa-card" onclick="Router.go(\'room\')"><div class="ov-qa-icon">' + ICONS.booking + '</div><span>訂房</span></div>';
     var pendingBadge = pendingTrips.length > 0 ? '<span class="ov-qa-badge">' + pendingTrips.length + '</span>' : '';
     html += '<div class="ov-qa-card" onclick="Router.go(\'pending\')"><div class="ov-qa-icon">' + ICONS.warning + '</div><span>待結帳</span>' + pendingBadge + '</div>';
-    html += '<div class="ov-qa-card" onclick="Router.go(\'member\')"><div class="ov-qa-icon">' + ICONS.member + '</div><span>會員查詢</span></div>';
+    html += '<div class="ov-qa-card" onclick="Router.go(\'membersMgmt\')"><div class="ov-qa-icon">' + ICONS.member + '</div><span>會員查詢</span></div>';
     html += '<div class="ov-qa-card" onclick="OverviewPage.showCreateTrip()"><div class="ov-qa-icon">' + ICONS.active + '</div><span>建團</span></div>';
     html += '</div>';
 
@@ -9892,6 +9931,8 @@ var MembersMgmtPage = (function() {
     html += '<option value="complete">已完成</option>';
     html += '<option value="draft">草稿</option>';
     html += '</select>';
+    // v1.9.1 關鍵字搜尋（名字／會員編號／賭場編號／代理名）
+    html += '<input type="text" id="mgmt-kw-filter" class="form-input" placeholder="搜尋會員（名字／編號）..." oninput="MembersMgmtPage.filter()" autocomplete="off">';
     html += '</div>';
 
     /* v1.6.0 手機卡片式列表（桌面上仍顯示表格） */
@@ -9899,7 +9940,8 @@ var MembersMgmtPage = (function() {
     members.forEach(function(m) {
       var agent = Agents.getById(m.agentId);
       var sh = Shareholders.getById(m.shareholderId);
-      html += '<div class="m-card" data-sh="' + m.shareholderId + '" data-agent="' + m.agentId + '" data-status="' + m.status + '">';
+      var kw = [m.name, m.id, m.casinoId, agent ? agent.name : '', sh ? sh.name : ''].join(' ').toLowerCase();
+      html += '<div class="m-card" data-sh="' + m.shareholderId + '" data-agent="' + m.agentId + '" data-status="' + m.status + '" data-kw="' + escAttr(kw) + '">';
       html += '<div class="m-card-head"><span class="m-card-title">' + esc(m.name || '(未命名)') + '</span><span>' + (m.status === 'complete' ? '✅ 已完成' : '📝 草稿') + '</span></div>';
       html += '<div class="m-card-grid">';
       html += '<div><div class="k">會員ID</div><div class="v">' + esc(m.id) + '</div></div>';
@@ -9925,7 +9967,8 @@ var MembersMgmtPage = (function() {
     members.forEach(function(m) {
       var agent = Agents.getById(m.agentId);
       var sh = Shareholders.getById(m.shareholderId);
-      html += '<tr data-sh="' + m.shareholderId + '" data-agent="' + m.agentId + '" data-status="' + m.status + '">';
+      var kw = [m.name, m.id, m.casinoId, agent ? agent.name : '', sh ? sh.name : ''].join(' ').toLowerCase();
+      html += '<tr data-sh="' + m.shareholderId + '" data-agent="' + m.agentId + '" data-status="' + m.status + '" data-kw="' + escAttr(kw) + '">';
       html += '<td>' + m.id + '</td>';
       html += '<td>' + (m.name || '') + '</td>';
       html += '<td>' + (m.casinoId || '') + '</td>';
@@ -9950,12 +9993,15 @@ var MembersMgmtPage = (function() {
     var shFilter = document.getElementById('mgmt-sh-filter').value;
     var agentFilter = document.getElementById('mgmt-agent-filter').value;
     var statusFilter = document.getElementById('mgmt-status-filter').value;
+    var kwEl = document.getElementById('mgmt-kw-filter');
+    var kw = kwEl ? kwEl.value.trim().toLowerCase() : '';
 
     document.querySelectorAll('#page-members-mgmt tbody tr, #page-members-mgmt .m-card').forEach(function(row) {
       var show = true;
       if (shFilter && row.getAttribute('data-sh') !== shFilter) show = false;
       if (agentFilter && row.getAttribute('data-agent') !== agentFilter) show = false;
       if (statusFilter && row.getAttribute('data-status') !== statusFilter) show = false;
+      if (kw && (row.getAttribute('data-kw') || '').indexOf(kw) < 0) show = false;
       row.style.display = show ? '' : 'none';
     });
   }
@@ -10954,7 +11000,7 @@ var SettingsPage = (function() {
       '<span class="text-danger">⚠ 已逾期，建議立即備份</span>' :
       '<span class="text-secondary">狀態正常</span>';
 
-    var html = '<div class="card">';
+    var html = '<div class="card" id="st-backup-card">';
     html += '<div class="card-header"><h3>資料備份</h3></div>';
     html += '<p class="section-desc">' +
             '一鍵打包全系統資料（會員／代理／股東／行程／帳務／訂房／設定）為 JSON 檔。' +
@@ -11039,40 +11085,65 @@ var SettingsPage = (function() {
   }
 
   /* ===== Phase 1D / 1.15 同步衝突可視化 ===== */
+  // v1.9.1 以白話中文呈現（集合物件名稱 + 資料名稱 + 欄位差異摘要），不再顯示原始 fbKey
+  var _COLLECTION_LABELS = {
+    members: '會員', memberTxs: '帳務', trips: '行程(團)', bookings: '訂房',
+    agents: '代理', shareholders: '股東', supplements: '補帳',
+    settings: '系統設定', extraIncome: '額外收入', hotelConfig: '酒店設定',
+    users: '帳號', auditLog: '審計紀錄',
+  };
+  var _FIELD_LABELS = {
+    id: '編號', name: '名稱', casinoId: '賭場編號', agentId: '代理', shareholderId: '股東',
+    tripId: '所屬團', memberId: '會員', hotel: '酒店', visitDate: '前往日期',
+    washCode: '洗碼', outCode: '出碼', backCode: '回碼', rate: '費率', amount: '金額',
+    guestName: '客人', roomType: '房型', checkIn: '入住日', checkOut: '退房日',
+    type: '類型', note: '備註', notes: '備註', status: '狀態', date: '日期',
+  };
+  function _conflictLabel(v) {
+    if (!v) return '—';
+    if (v.name) return v.name;
+    if (v.hotel) return v.hotel + (v.date ? '（' + v.date + '）' : '');
+    if (v.date) return v.date;
+    return v.id || '';
+  }
+  function _diffSummary(a, b) {
+    if (!a || !b) return '';
+    var keys = {};
+    Object.keys(a).concat(Object.keys(b)).forEach(function(k) { keys[k] = true; });
+    var lines = [];
+    Object.keys(keys).sort().forEach(function(k) {
+      if (k.charAt(0) === '_') return;
+      if (_stableStringify(a[k]) === _stableStringify(b[k])) return;
+      var label = _FIELD_LABELS[k] || k;
+      function fmt(v) {
+        var s = (v === undefined || v === null || v === '') ? '（空）' : String(v);
+        return s.length > 24 ? s.slice(0, 24) + '…' : s;
+      }
+      lines.push(label + '：本機「' + fmt(a[k]) + '」／雲端「' + fmt(b[k]) + '」');
+    });
+    return lines.slice(0, 6).join('<br>');
+  }
   function _renderConflictsCard() {
     var list = (typeof Conflicts !== 'undefined') ? Conflicts.getAll() : [];
     var html = '<div class="card">';
     html += '<div class="card-header"><h3>同步衝突</h3></div>';
     html += '<p class="section-desc">以下資料在同步時偵測到本機與雲端版本不一致，請選擇保留版本。</p>';
-    html += '<table class="data-table"><thead><tr>';
-    html += '<th>集合</th><th>識別碼</th><th>本機版本</th><th>雲端版本</th><th>時間</th><th>操作</th>';
-    html += '</tr></thead><tbody>';
     list.slice().reverse().forEach(function(c) {
-      var localDesc = _conflictVerDesc(c.local);
-      var remoteDesc = _conflictVerDesc(c.remote);
+      var colLabel = _COLLECTION_LABELS[c.collection] || c.collection;
       var winnerTag = c.winner === 'remote' ? '（目前保留雲端）' : '（目前保留本機）';
-      html += '<tr>';
-      html += '<td>' + esc(c.collection) + '</td>';
-      html += '<td>' + esc(c.fbKey || '') + '</td>';
-      html += '<td>' + localDesc + '</td>';
-      html += '<td>' + remoteDesc + '</td>';
-      html += '<td>' + esc(_fmtTime(c.at)) + winnerTag + '</td>';
-      html += '<td>';
+      html += '<div class="conflict-item">';
+      html += '<div class="conflict-item-head"><span class="conflict-item-title">' + esc(colLabel) + '：' + esc(_conflictLabel(c.local) || _conflictLabel(c.remote)) + '</span>';
+      html += '<span class="text-secondary text-sm">' + esc(_fmtTime(c.at)) + winnerTag + '</span></div>';
+      html += '<div class="conflict-item-diff">' + _diffSummary(c.local, c.remote) + '</div>';
+      html += '<div class="conflict-item-actions">';
       html += '<button class="btn btn-primary btn-gap" onclick="SettingsPage.resolveConflict(\'' + c.id + '\',\'local\')">保留本機</button>';
       html += '<button class="btn btn-primary" onclick="SettingsPage.resolveConflict(\'' + c.id + '\',\'remote\')">保留雲端</button>';
-      html += '</td>';
-      html += '</tr>';
+      html += '</div>';
+      html += '</div>';
     });
-    html += '</tbody></table>';
     html += '<div class="form-group-actions"><button class="btn" onclick="SettingsPage.clearConflicts()">全部忽略（保留目前版本）</button></div>';
     html += '</div>';
     return html;
-  }
-  function _conflictVerDesc(v) {
-    if (!v) return '<span class="text-secondary">—</span>';
-    var name = v.name || v.id || v._fbKey || '';
-    var ts = v._updatedAt ? _fmtTime(v._updatedAt) : '';
-    return esc(name) + (ts ? ' <span class="text-secondary">@' + esc(ts) + '</span>' : '');
   }
   function _fmtTime(ts) {
     if (!ts) return '';
@@ -11588,6 +11659,10 @@ function initApp() {
   }
 
   // 1b-1. Phase 1D / 1.15 衝突可視化：同步偵測衝突 → Toast 提示（操作者可至設定頁審視）
+  // v1.9.1：啟動時先清除舊版誤報的假性衝突（鍵序不同被判為衝突的歷史記錄）
+  if (typeof Conflicts !== 'undefined') {
+    try { Conflicts.pruneFalsePositives(); } catch (e) { console.error('[App] 衝突清理失敗', e); }
+  }
   if (typeof EventBus !== 'undefined') {
     EventBus.on(EVENTS.SYNC_CONFLICT, function(info) {
       if (info && typeof Toast !== 'undefined') {
