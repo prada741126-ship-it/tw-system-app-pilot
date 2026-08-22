@@ -2123,3 +2123,18 @@ input, select, textarea { font-size: 16px; }
 
 /* 會員管理關鍵字搜尋框（桌機與篩選同一列，手機跟著 filter-bar 直排） */
 #mgmt-kw-filter { flex: 1; min-width: 180px; }
+
+/* ==========================================================================
+   v1.9.2 補修：摺疊卡片（貴賓廳費率/門票價格）body 的 overflow:hidden 會把
+   超寬表格直接裁掉，導致外層卡片的 overflow-x:auto 捲不到東西。
+   手機版展開時讓 body 自己橫向捲動，收合時維持 hidden 做動畫。
+   ========================================================================== */
+@media (max-width: 768px) {
+  .st-collapsible .st-collapsible-body {
+    overflow-y: hidden;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .st-collapsible.st-collapsed .st-collapsible-body { overflow: hidden; }
+  .st-collapsible-body .data-table { min-width: 520px; }
+}
