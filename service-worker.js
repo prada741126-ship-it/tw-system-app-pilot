@@ -6,7 +6,7 @@
  *   - 其他 → stale-while-revalidate
  */
 
-var CACHE_VERSION = 'tw-app-v1.9.5';  /// 2026-08-23 開銷可標記「代理吸收」(不從會員交收扣除,由代理負擔);BOT帳可手動編輯
+var CACHE_VERSION = 'tw-app-v1.9.6';  /// 2026-08-23 新增帳務會員選擇器僅列本團會員(依建團勾選過濾)
 var STATIC_CACHE = CACHE_VERSION + '-static';
 var RUNTIME_CACHE = CACHE_VERSION + '-runtime';
 
