@@ -6,7 +6,7 @@
  *   - 其他 → stale-while-revalidate
  */
 
-var CACHE_VERSION = 'tw-app-v1.9.6';  /// 2026-08-23 新增帳務會員選擇器僅列本團會員(依建團勾選過濾)
+var CACHE_VERSION = 'tw-app-v1.9.7';  /// 2026-08-23 帳務會員選擇器加本團人數表頭;本機缺團員資料時警示並自動從Firebase補拉(跨裝置同步漏接)
 var STATIC_CACHE = CACHE_VERSION + '-static';
 var RUNTIME_CACHE = CACHE_VERSION + '-runtime';
 
