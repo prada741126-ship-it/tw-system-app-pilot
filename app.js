@@ -52,9 +52,10 @@ var CONFIG = {
 // 未注入（正式出包、網頁版、Node 測試）一律走 taiwan_data 正式路徑
 // ============================================================================
 var _TW_IS_DEV = (typeof window !== 'undefined' && window.TW_DEV_MODE === true);
-// 2026-08-22: 試點包改用 taiwan_data（該路徑為空且 DB 規則允許匿名讀寫；
-// taiwan_data_dev 不在規則白名單內，讀寫全被拒，無法建立帳號）
-var FB_DATA_ROOT = 'taiwan_data';
+// 2026-08-22: 改用 taiwan_data/pilot/（獨立子路徑）— 試點測試與正式資料完全隔離，
+// 測試完畢確認沒問題後才會合併回 taiwan_data。
+// （taiwan_data 頂層現在是正式營運資料：18 會員/9 代理/7 股東/32 訂房/44 帳務）
+var FB_DATA_ROOT = 'taiwan_data/pilot';
 // 本機 localStorage 仍用 dev 前綴，避免測試快取混入本機正式快取
 var STORAGE_PREFIX = _TW_IS_DEV ? 'tw1d_' : 'tw1_';
 
