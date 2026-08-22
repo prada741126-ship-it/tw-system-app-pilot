@@ -2083,12 +2083,17 @@ input, select, textarea { font-size: 16px; }
 /* ==========================================================================
    v1.9.0 送入待結帳大按鈕（原本擠在 header 小行，手機難找）
    ========================================================================== */
-.mark-pending-bar { padding: 0 0 12px 0; }
+/* v1.9.11 待結帳撤回列（帳務頁：狀態提示 + 撤回按鈕） */
+.mark-pending-bar { padding: 0 0 12px 0; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .mark-pending-btn {
   width: 100%;
   padding: 14px 12px;
   font-size: 16px;
   font-weight: 700;
+}
+.mark-pending-bar .btn { flex: 0 0 auto; }
+@media (max-width: 768px) {
+  .mark-pending-bar .btn { flex: 1 1 100%; }
 }
 
 /* ==========================================================================
