@@ -6,7 +6,7 @@
  *   - 其他 → stale-while-revalidate
  */
 
-var CACHE_VERSION = 'tw-app-v1.5.0';  // 2026-08-22 資料隔離：改連 taiwan_data/pilot/，試點測試不再碰正式營運資料
+var CACHE_VERSION = 'tw-app-v1.6.0';  // 2026-08-22 手機操作體驗優化：彈窗底部滑出、寬表格卡片化、會員搜尋＋最近使用、訂房必填驗證
 var STATIC_CACHE = CACHE_VERSION + '-static';
 var RUNTIME_CACHE = CACHE_VERSION + '-runtime';
 
