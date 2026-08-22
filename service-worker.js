@@ -6,7 +6,7 @@
  *   - 其他 → stale-while-revalidate
  */
 
-var CACHE_VERSION = 'tw-app-v1.9.2';  // 2026-08-23 修bug：摺疊卡片(貴賓廳費率/門票價格)內表格可橫向捲動
+var CACHE_VERSION = 'tw-app-v1.9.3';  // 2026-08-23 待結帳流程對齊：傳帳給上級=送入待結帳(同時分享明細)、交收完成=封存
 var STATIC_CACHE = CACHE_VERSION + '-static';
 var RUNTIME_CACHE = CACHE_VERSION + '-runtime';
 
