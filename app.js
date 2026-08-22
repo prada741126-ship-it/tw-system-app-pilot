@@ -3363,6 +3363,12 @@ var Trips = (function() {
     if (updated) EventBus.emit(EVENTS.TRIP_SEALED, updated);
     return updated;
   }
+  // v1.9.11 撤回待結帳：退回 active 恢復可編輯（交收完成封存前都可反悔）
+  function revertPending(id) {
+    var trip = getById(id);
+    if (!trip || trip.status !== TRIP_STATUS.PENDING_SETTLEMENT) return null;
+    return update(id, { status: TRIP_STATUS.ACTIVE, lastSettlementDate: null });
+  }
   function remove(id) {
     var arr = State.get('trips') || [];
     var idx = arr.findIndex(function(t) { return t.id === id; });
@@ -3374,7 +3380,7 @@ var Trips = (function() {
     enqueue(FB_PATH.TRIPS, obj);
     EventBus.emit(EVENTS.TRIP_UPDATED, arr[idx]);
   }
-  return { load: load, save: save, getAll: getAll, getById: getById, getActiveByShareholder: getActiveByShareholder, create: create, update: update, sealTrip: sealTrip, remove: remove };
+  return { load: load, save: save, getAll: getAll, getById: getById, getActiveByShareholder: getActiveByShareholder, create: create, update: update, sealTrip: sealTrip, revertPending: revertPending, remove: remove };
 })();
 
 
@@ -5898,7 +5904,7 @@ var PendingPage = (function() {
     var trips = Trips.getAll().filter(function(t) { return t.status === TRIP_STATUS.PENDING_SETTLEMENT; });
     var html = '<div class="card">';
     html += '<div class="card-header"><h3>待結帳團列表</h3></div>';
-    html += '<p class="section-desc">會計在帳務頁「傳帳給上級」後，團會出現在這裡。與上級確認交收完成後，即可封存歸檔。</p>';
+    html += '<p class="section-desc">會計在帳務頁「傳帳給上級」後，團會出現在這裡。帳務有誤可「撤回」退回帳務頁重新編輯；與上級確認交收完成後，即可封存歸檔（封存＝雙方確認，不可再改）。</p>';
 
     if (trips.length === 0) {
       html += Icons.empty('無待結帳的團', '帳務頁完成「傳帳給上級」後，團會出現在這裡');
@@ -6029,6 +6035,8 @@ var PendingPage = (function() {
     html += '</div>';
     // v1.9.3 流程對齊：傳帳已在帳務頁完成（進入待結帳時已分享），此處可重傳；
     // 交收完成後才封存
+    // v1.9.11 撤回：帳務有誤可退回帳務頁重新編輯（封存＝雙方確認，才是不可逆）
+    html += '<button class="btn btn-secondary" onclick="PendingPage.revertTrip(\'' + trip.id + '\')">撤回 · 重新編輯</button>';
     html += '<button class="btn btn-primary" onclick="PendingPage.shareTrip(\'' + trip.id + '\')">重傳明細</button>';
     html += '<button class="btn btn-danger" onclick="PendingPage.sealTrip(\'' + trip.id + '\')">交收完成 · 封存</button>';
     html += '</div>';
@@ -6296,7 +6304,16 @@ var PendingPage = (function() {
     });
   }
 
-  return { render: render, sealTrip: sealTrip, toggleCard: toggleCard, showMemberDetail: showMemberDetail, shareTrip: shareTrip, buildShareText: buildShareText, shareText: _shareText };
+  // v1.9.11 撤回待結帳：退回帳務頁恢復可編輯（發現計算錯誤時用；封存前都可反悔）
+  function revertTrip(tripId) {
+    Modal.confirm('將團 ' + tripId + ' 撤回帳務頁？\n撤回後可重新編輯帳務，修正後需再次「傳帳給上級」。', function() {
+      var ok = Trips.revertPending(tripId);
+      Toast[ok ? 'success' : 'error'](ok ? '團 ' + tripId + ' 已撤回帳務頁，可重新編輯' : '撤回失敗（此團不在待結帳狀態）');
+      if (ok) render();
+    });
+  }
+
+  return { render: render, sealTrip: sealTrip, revertTrip: revertTrip, toggleCard: toggleCard, showMemberDetail: showMemberDetail, shareTrip: shareTrip, buildShareText: buildShareText, shareText: _shareText };
 })();
 
 
@@ -6374,9 +6391,15 @@ var MemberPage = (function() {
     if (_selectedTrip) {
       var trip = Trips.getById(_selectedTrip);
       // v1.9.3 流程對齊：會計「傳帳給上級」= 送入待結帳（同時調出分享面板發送明細）
+      // v1.9.11 待結帳中也可從帳務頁直接撤回（計算錯誤時退回重新編輯）
       if (trip && trip.status === TRIP_STATUS.ACTIVE) {
         html += '<div class="mark-pending-bar">';
         html += '<button class="btn btn-warning mark-pending-btn" onclick="MemberPage.markPending(\'' + _selectedTrip + '\')">傳帳給上級 · 送入待結帳</button>';
+        html += '</div>';
+      } else if (trip && trip.status === TRIP_STATUS.PENDING_SETTLEMENT) {
+        html += '<div class="mark-pending-bar">';
+        html += '<span style="font-size:13px;color:var(--warning);align-self:center;">此團已送入待結帳，帳務已鎖定。</span>';
+        html += '<button class="btn btn-secondary" onclick="MemberPage.revertPending(\'' + _selectedTrip + '\')">撤回待結帳 · 重新編輯</button>';
         html += '</div>';
       }
       var mtxs = MemberTxs.getByTrip(_selectedTrip);
@@ -6819,6 +6842,7 @@ var MemberPage = (function() {
   function showAddTx(prefillTx) {
     var trip = Trips.getById(_selectedTrip);
     if (!trip) return;
+    if (_txLocked(null)) return; // v1.9.11 待結帳/封存中不可新增帳務
     var members = _tripMemberPool();
     var poolIds = members.map(function(m) { return m.id; });
     // v1.7.0 預設帶入最近使用會員（而非 members[0]）
@@ -7191,6 +7215,7 @@ var MemberPage = (function() {
   function editTx(txId) {
     var tx = MemberTxs.getById(txId);
     if (!tx) return;
+    if (_txLocked(tx)) return; // v1.9.11 待結帳/封存中不可編輯帳務
     _expenseRows = (tx.expenses || []).map(function(e) { return Object.assign({}, e); });
     _washManual = false; // v1.9.4 重置洗碼手動鎖
     // v1.9.10 載入守門：舊資料殘留 absorbed=true 自動歸零＋提示
@@ -7259,6 +7284,8 @@ var MemberPage = (function() {
   }
 
   function delTx(txId) {
+    var tx = MemberTxs.getById(txId);
+    if (tx && _txLocked(tx)) return; // v1.9.11 待結帳/封存中不可刪除帳務
     Modal.confirm('確定刪除此帳務記錄？', function() {
       MemberTxs.remove(txId);
       Toast.success('已刪除');
@@ -7284,7 +7311,7 @@ var MemberPage = (function() {
 
   // v1.9.3 傳帳給上級＝送入待結帳：先送入待結帳（鎖定帳務），再調出分享面板把明細發給上級代理/股東
   function markPending(tripId) {
-    Modal.confirm('會產生結帳明細並分享給所屬上級（代理/股東），\n此團同時送入待結帳、無法再新增/修改帳務。\n確定要傳帳？', function() {
+    Modal.confirm('會產生結帳明細並分享給所屬上級（代理/股東），\n此團同時送入待結帳、帳務鎖定無法新增/修改\n（若有計算錯誤，可隨時在待結帳頁或此處撤回重編）。\n確定要傳帳？', function() {
       Trips.update(tripId, { status: TRIP_STATUS.PENDING_SETTLEMENT, lastSettlementDate: TWDate.todayStr() });
       Toast.success('團 ' + tripId + ' 已傳帳並送入待結帳');
       _selectedTrip = null;
@@ -7295,6 +7322,27 @@ var MemberPage = (function() {
     });
   }
 
+  // v1.9.11 撤回待結帳：退回帳務頁恢復可編輯（計算錯誤時用；封存＝雙方確認才不可逆）
+  function revertPending(tripId) {
+    Modal.confirm('將團 ' + tripId + ' 撤回帳務頁？\n撤回後帳務恢復可編輯，修正後需再次「傳帳給上級」。', function() {
+      var ok = Trips.revertPending(tripId);
+      Toast[ok ? 'success' : 'error'](ok ? '團 ' + tripId + ' 已撤回，可重新編輯帳務' : '撤回失敗（此團不在待結帳狀態）');
+      if (ok) render();
+    });
+  }
+
+  // v1.9.11 帳務鎖定守門：非 active（待結帳/已封存）的團不可新增/修改/刪除帳務
+  function _txLocked(tx) {
+    var trip = tx && tx.tripId ? Trips.getById(tx.tripId) : Trips.getById(_selectedTrip);
+    if (trip && trip.status !== TRIP_STATUS.ACTIVE) {
+      Toast.error(trip.status === TRIP_STATUS.PENDING_SETTLEMENT
+        ? '此團已送入待結帳，請先「撤回待結帳」才能編輯'
+        : '此團已封存，不可修改帳務');
+      return true;
+    }
+    return false;
+  }
+
   return {
     render: render, selectTrip: selectTrip, selectAgent: selectAgent, switchTab: switchTab,
     onMemberSearch: onMemberSearch, searchMember: searchMember,
@@ -7303,7 +7351,7 @@ var MemberPage = (function() {
     addExpenseRow: addExpenseRow, _updExp: _updExp, _updExpType: _updExpType, _delExp: _delExp,
     calcUpDown: calcUpDown, calcWash: calcWash, _markWashManual: _markWashManual,
     _onMemberSearchFocus: _onMemberSearchFocus, _onMemberSearchInput: _onMemberSearchInput, _selectMember: _selectMember,
-    markPending: markPending,
+    markPending: markPending, revertPending: revertPending,
   };
 })();
 
