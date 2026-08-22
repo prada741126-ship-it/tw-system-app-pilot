@@ -6,7 +6,7 @@
  *   - 其他 → stale-while-revalidate
  */
 
-var CACHE_VERSION = 'tw-app-v1.9.1';  // 2026-08-23 修bug：假性同步衝突(鍵序誤判+白話顯示)、會員查詢跳錯頁、設定頁橫向捲動、備份iOS分享面板
+var CACHE_VERSION = 'tw-app-v1.9.2';  // 2026-08-23 修bug：摺疊卡片(貴賓廳費率/門票價格)內表格可橫向捲動
 var STATIC_CACHE = CACHE_VERSION + '-static';
 var RUNTIME_CACHE = CACHE_VERSION + '-runtime';
 
