@@ -5942,6 +5942,9 @@ var PendingPage = (function() {
     var supPending = supplements.filter(function(s) { return s.status === 'pending'; })
       .reduce(function(s, sup) { return s + (sup.settlementAmount || 0); }, 0);
     var memberCount = Object.keys(mtxs.reduce(function(acc, tx) { acc[tx.memberId] = true; return acc; }, {})).length;
+    // v1.9.9 代理吸收＝代理自掏腰包負擔，公司應收總額＝會員交收＋代理吸收
+    var totalAbsorbed = mtxs.reduce(function(s, t) { return s + calcAbsorbedNT(t.expenses || []); }, 0);
+    var grandReceivable = totalSettle + totalAbsorbed;
 
     var isExpanded = _expandedTrips[trip.id];
 
@@ -5957,7 +5960,11 @@ var PendingPage = (function() {
     html += '<div class="pd-card-stats">';
     html += '<span>會員 ' + mtxs.length + ' 筆</span>';
     html += '<span>洗碼 ' + fmtCardNum(totalWash) + ' 萬</span>';
-    html += '<span class="' + (totalSettle < 0 ? 'num-negative' : 'num-positive') + '">交收 NT$ ' + fmtCardNum(Math.round(totalSettle)) + '</span>';
+    html += '<span class="' + (totalSettle < 0 ? 'num-negative' : 'num-positive') + '">會員交收 NT$ ' + fmtCardNum(Math.round(totalSettle)) + '</span>';
+    if (totalAbsorbed > 0) {
+      html += '<span class="text-warning fw-semibold">代理吸收 NT$ ' + fmtCardNum(totalAbsorbed) + '</span>';
+      html += '<span class="fw-semibold ' + (grandReceivable < 0 ? 'num-negative' : 'num-positive') + '">應收 NT$ ' + fmtCardNum(Math.round(grandReceivable)) + '</span>';
+    }
     html += '<span>訂房 ' + roomNights + ' 晚</span>';
     if (supPending > 0) {
       html += '<span class="text-warning fw-semibold">補帳 NT$ ' + fmtCardNum(Math.round(supPending)) + '</span>';
@@ -6012,7 +6019,11 @@ var PendingPage = (function() {
     html += '<div class="pd-card-footer">';
     html += '<div class="mb-ap-stats pd-stats">';
     html += '<div class="mb-ap-stat"><label>總洗碼</label><span>' + fmtCardNum(totalWash) + ' 萬</span></div>';
-    html += '<div class="mb-ap-stat"><label>總交收</label><span class="' + (totalSettle < 0 ? 'num-negative' : 'num-positive') + '">' + fmtCardNum(Math.trunc(totalSettle / 100) * 100) + '</span></div>';
+    html += '<div class="mb-ap-stat"><label>會員交收</label><span class="' + (totalSettle < 0 ? 'num-negative' : 'num-positive') + '">' + fmtCardNum(Math.trunc(totalSettle / 100) * 100) + '</span></div>';
+    if (totalAbsorbed > 0) {
+      html += '<div class="mb-ap-stat"><label>代理吸收（向代理另收）</label><span class="text-warning fw-semibold">' + fmtCardNum(totalAbsorbed) + '</span></div>';
+      html += '<div class="mb-ap-stat"><label>應收總額</label><span class="fw-semibold ' + (grandReceivable < 0 ? 'num-negative' : 'num-positive') + '">' + fmtCardNum(Math.trunc(grandReceivable / 100) * 100) + '</span></div>';
+    }
     html += '<div class="mb-ap-stat"><label>訂房數</label><span>' + roomNights + ' 晚</span></div>';
     html += '<div class="mb-ap-stat"><label>會員數</label><span>' + memberCount + '</span></div>';
     html += '</div>';
@@ -6131,10 +6142,21 @@ var PendingPage = (function() {
 
     // 合計
     var grandTotal = mtxs.reduce(function(s, t) { return s + calcTotalNT(t); }, 0);
+    var absGrand = mtxs.reduce(function(s, t) { return s + calcAbsorbedNT(t.expenses || []); }, 0);
     html += '<div class="pd-detail-total">';
-    html += '<span>合計總交收</span>';
+    html += '<span>會員交收合計</span>';
     html += '<span class="' + (grandTotal < 0 ? 'num-negative' : 'num-positive') + '">NT$ ' + fmtCardNum(Math.round(grandTotal)) + '</span>';
     html += '</div>';
+    if (absGrand > 0) {
+      html += '<div class="pd-detail-total">';
+      html += '<span>代理吸收（向代理另收）</span>';
+      html += '<span class="text-warning fw-semibold">NT$ ' + fmtCardNum(absGrand) + '</span>';
+      html += '</div>';
+      html += '<div class="pd-detail-total">';
+      html += '<span>應收總額（會員＋代理吸收）</span>';
+      html += '<span class="fw-semibold ' + (grandTotal + absGrand < 0 ? 'num-negative' : 'num-positive') + '">NT$ ' + fmtCardNum(Math.round(grandTotal + absGrand)) + '</span>';
+      html += '</div>';
+    }
 
     html += '</div>';
 
@@ -6213,9 +6235,16 @@ var PendingPage = (function() {
         var m = Members.getById(mid);
         lines.push((m ? maskName(m.name) : mid) + '（' + g.hallName + '）交收 NT$ ' + fmtCardNum(Math.round(g.totalSettle)));
         if (g.expList.length > 0) lines.push('　開銷: ' + g.expList.join('、') + '（NT$ ' + fmtCardNum(Math.round(g.expNT)) + '，已從交收扣除）');
-        if (g.absList.length > 0) lines.push('　代理吸收: ' + g.absList.join('、') + '（NT$ ' + fmtCardNum(Math.round(g.absNT)) + '，由代理負擔，不從交收扣除）');
+        if (g.absList.length > 0) lines.push('　代理吸收: ' + g.absList.join('、') + '（NT$ ' + fmtCardNum(Math.round(g.absNT)) + '，向代理另收，不從會員交收扣除）');
       });
-      lines.push('──── 合計 NT$ ' + fmtCardNum(Math.trunc(totalSettle / 100) * 100) + ' ────');
+      var absGrand = mtxs.reduce(function(s, t) { return s + calcAbsorbedNT(t.expenses || []); }, 0);
+      if (absGrand > 0) {
+        lines.push('──── 會員交收 NT$ ' + fmtCardNum(Math.trunc(totalSettle / 100) * 100) + ' ────');
+        lines.push('代理吸收（向代理另收） NT$ ' + fmtCardNum(absGrand));
+        lines.push('應收總額 NT$ ' + fmtCardNum(Math.trunc((totalSettle + absGrand) / 100) * 100) + ' ＝ 會員交收 + 代理吸收');
+      } else {
+        lines.push('──── 合計 NT$ ' + fmtCardNum(Math.trunc(totalSettle / 100) * 100) + ' ────');
+      }
     } else {
       lines.push('此團尚無帳務記錄');
     }
@@ -6658,6 +6687,9 @@ var MemberPage = (function() {
       var totalWash = agentTxs.reduce(function(s, t) { return s + (t.washCode || 0); }, 0);
       var totalWinLoss = agentTxs.reduce(function(s, t) { return s + (t.ntResult || 0) * 10000; }, 0);
       var totalSettle = agentTxs.reduce(function(s, t) { return s + calcTotalNT(t); }, 0);
+      // v1.9.9 代理吸收＝代理自掏腰包，應收總額＝會員交收＋代理吸收
+      var totalAbsorbed = agentTxs.reduce(function(s, t) { return s + calcAbsorbedNT(t.expenses || []); }, 0);
+      var grandReceivable = totalSettle + totalAbsorbed;
       var roomCount = quota.roomCount;
       var memberCount = tripMemberIds.filter(function(mid) {
         var mem = Members.getById(mid);
@@ -6666,7 +6698,11 @@ var MemberPage = (function() {
 
       html += '<div class="mb-ap-stats">';
       html += '<div class="mb-ap-stat"><label>總洗碼</label><span>' + fmtCardNum(totalWash) + ' 萬</span></div>';
-      html += '<div class="mb-ap-stat"><label>總交收</label><span class="' + (totalSettle < 0 ? 'num-negative' : 'num-positive') + '">' + fmtCardNum(Math.trunc(totalSettle / 100) * 100) + '</span></div>';
+      html += '<div class="mb-ap-stat"><label>會員交收</label><span class="' + (totalSettle < 0 ? 'num-negative' : 'num-positive') + '">' + fmtCardNum(Math.trunc(totalSettle / 100) * 100) + '</span></div>';
+      if (totalAbsorbed > 0) {
+        html += '<div class="mb-ap-stat"><label>代理吸收（向代理另收）</label><span class="text-warning fw-semibold">' + fmtCardNum(totalAbsorbed) + '</span></div>';
+        html += '<div class="mb-ap-stat"><label>應收總額</label><span class="fw-semibold ' + (grandReceivable < 0 ? 'num-negative' : 'num-positive') + '">' + fmtCardNum(Math.trunc(grandReceivable / 100) * 100) + '</span></div>';
+      }
       html += '<div class="mb-ap-stat"><label>訂房數</label><span>' + roomCount + ' 晚</span></div>';
       html += '<div class="mb-ap-stat"><label>會員數</label><span>' + memberCount + '</span></div>';
       html += '</div>';
@@ -6680,7 +6716,7 @@ var MemberPage = (function() {
         html += Icons.empty('尚無代理', '點擊「新增代理」建立第一筆資料');
       } else {
         // 整體統計卡片
-        var totalWash = 0, totalSettle = 0, totalRooms = 0;
+        var totalWash = 0, totalSettle = 0, totalRooms = 0, totalAbsorbed = 0;
         agents.forEach(function(ag) {
           var agTxs = tripMtxs.filter(function(t) {
             var effectiveAgentId = t.agentId || (trip ? trip.agentId : '');
@@ -6688,16 +6724,23 @@ var MemberPage = (function() {
           });
           var agWash = agTxs.reduce(function(s, t) { return s + (t.washCode || 0); }, 0);
           var agSettle = agTxs.reduce(function(s, t) { return s + calcTotalNT(t); }, 0);
+          var agAbs = agTxs.reduce(function(s, t) { return s + calcAbsorbedNT(t.expenses || []); }, 0);
           var agRooms = allBookings.filter(function(b) { return b.agentId === ag.id; }).reduce(function(s, b) { return s + (b.nights || 1); }, 0);
           totalWash += agWash;
           totalSettle += agSettle;
+          totalAbsorbed += agAbs;
           totalRooms += agRooms;
         });
         var totalMembers = tripMemberIds.length;
+        var grandReceivable = totalSettle + totalAbsorbed;
 
         html += '<div class="mb-ap-stats">';
         html += '<div class="mb-ap-stat"><label>總洗碼</label><span>' + fmtCardNum(totalWash) + ' 萬</span></div>';
-        html += '<div class="mb-ap-stat"><label>總交收</label><span class="' + (totalSettle < 0 ? 'num-negative' : 'num-positive') + '">' + fmtCardNum(Math.trunc(totalSettle / 100) * 100) + '</span></div>';
+        html += '<div class="mb-ap-stat"><label>會員交收</label><span class="' + (totalSettle < 0 ? 'num-negative' : 'num-positive') + '">' + fmtCardNum(Math.trunc(totalSettle / 100) * 100) + '</span></div>';
+        if (totalAbsorbed > 0) {
+          html += '<div class="mb-ap-stat"><label>代理吸收（向代理另收）</label><span class="text-warning fw-semibold">' + fmtCardNum(totalAbsorbed) + '</span></div>';
+          html += '<div class="mb-ap-stat"><label>應收總額</label><span class="fw-semibold ' + (grandReceivable < 0 ? 'num-negative' : 'num-positive') + '">' + fmtCardNum(Math.trunc(grandReceivable / 100) * 100) + '</span></div>';
+        }
         html += '<div class="mb-ap-stat"><label>訂房數</label><span>' + totalRooms + ' 晚</span></div>';
         html += '<div class="mb-ap-stat"><label>會員數</label><span>' + totalMembers + '</span></div>';
         html += '</div>';
@@ -10492,6 +10535,9 @@ var HistoryPage = (function() {
 
     var totalWash = mtxs.reduce(function(s, t) { return s + (t.washCode || 0); }, 0);
     var totalSettle = mtxs.reduce(function(s, t) { return s + calcTotalNT(t); }, 0);
+    // v1.9.9 代理吸收（向代理另收），應收總額＝會員交收＋代理吸收
+    var totalAbsorbed = mtxs.reduce(function(s, t) { return s + calcAbsorbedNT(t.expenses || []); }, 0);
+    var grandReceivable = totalSettle + totalAbsorbed;
     var roomNights = bookings.reduce(function(s, b) { return s + (b.nights || 1); }, 0);
     var memberCount = Object.keys(mtxs.reduce(function(acc, tx) { acc[tx.memberId] = true; return acc; }, {})).length;
     var sealedDate = trip.sealedAt ? TWDate.dateStrFrom(trip.sealedAt) : (trip.endDate || '-');
@@ -10510,7 +10556,11 @@ var HistoryPage = (function() {
     html += '<div class="pd-card-stats">';
     html += '<span>會員 ' + mtxs.length + ' 筆</span>';
     html += '<span>洗碼 ' + fmtCardNum(totalWash) + ' 萬</span>';
-    html += '<span class="' + (totalSettle < 0 ? 'num-negative' : 'num-positive') + '">交收 NT$ ' + fmtCardNum(Math.round(totalSettle)) + '</span>';
+    html += '<span class="' + (totalSettle < 0 ? 'num-negative' : 'num-positive') + '">會員交收 NT$ ' + fmtCardNum(Math.round(totalSettle)) + '</span>';
+    if (totalAbsorbed > 0) {
+      html += '<span class="text-warning fw-semibold">代理吸收 NT$ ' + fmtCardNum(totalAbsorbed) + '</span>';
+      html += '<span class="fw-semibold ' + (grandReceivable < 0 ? 'num-negative' : 'num-positive') + '">應收 NT$ ' + fmtCardNum(Math.round(grandReceivable)) + '</span>';
+    }
     html += '<span>訂房 ' + roomNights + ' 晚</span>';
     html += '</div>';
     html += '<span class="st-toggle-icon">▼</span>';
@@ -10561,7 +10611,11 @@ var HistoryPage = (function() {
     html += '<div class="pd-card-footer">';
     html += '<div class="mb-ap-stats pd-stats">';
     html += '<div class="mb-ap-stat"><label>總洗碼</label><span>' + fmtCardNum(totalWash) + ' 萬</span></div>';
-    html += '<div class="mb-ap-stat"><label>總交收</label><span class="' + (totalSettle < 0 ? 'num-negative' : 'num-positive') + '">' + fmtCardNum(Math.trunc(totalSettle / 100) * 100) + '</span></div>';
+    html += '<div class="mb-ap-stat"><label>會員交收</label><span class="' + (totalSettle < 0 ? 'num-negative' : 'num-positive') + '">' + fmtCardNum(Math.trunc(totalSettle / 100) * 100) + '</span></div>';
+    if (totalAbsorbed > 0) {
+      html += '<div class="mb-ap-stat"><label>代理吸收（向代理另收）</label><span class="text-warning fw-semibold">' + fmtCardNum(totalAbsorbed) + '</span></div>';
+      html += '<div class="mb-ap-stat"><label>應收總額</label><span class="fw-semibold ' + (grandReceivable < 0 ? 'num-negative' : 'num-positive') + '">' + fmtCardNum(Math.trunc(grandReceivable / 100) * 100) + '</span></div>';
+    }
     html += '<div class="mb-ap-stat"><label>訂房數</label><span>' + roomNights + ' 晚</span></div>';
     html += '<div class="mb-ap-stat"><label>會員數</label><span>' + memberCount + '</span></div>';
     html += '</div>';
@@ -10692,10 +10746,21 @@ var HistoryPage = (function() {
 
     // 合計
     var grandTotal = mtxs.reduce(function(s, t) { return s + calcTotalNT(t); }, 0);
+    var absGrand = mtxs.reduce(function(s, t) { return s + calcAbsorbedNT(t.expenses || []); }, 0);
     html += '<div class="pd-detail-total">';
-    html += '<span>合計總交收</span>';
+    html += '<span>會員交收合計</span>';
     html += '<span class="' + (grandTotal < 0 ? 'num-negative' : 'num-positive') + '">NT$ ' + fmtCardNum(Math.round(grandTotal)) + '</span>';
     html += '</div>';
+    if (absGrand > 0) {
+      html += '<div class="pd-detail-total">';
+      html += '<span>代理吸收（向代理另收）</span>';
+      html += '<span class="text-warning fw-semibold">NT$ ' + fmtCardNum(absGrand) + '</span>';
+      html += '</div>';
+      html += '<div class="pd-detail-total">';
+      html += '<span>應收總額（會員＋代理吸收）</span>';
+      html += '<span class="fw-semibold ' + (grandTotal + absGrand < 0 ? 'num-negative' : 'num-positive') + '">NT$ ' + fmtCardNum(Math.round(grandTotal + absGrand)) + '</span>';
+      html += '</div>';
+    }
 
     html += '</div>';
 
