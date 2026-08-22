@@ -1,6 +1,6 @@
 {
-  "version": "v1.7.0",
-  "buildTime": 1787391000000,
+  "version": "v1.8.0",
+  "buildTime": 1787395800000,
   "platform": "app",
   "env": "pilot",
   "dataRoot": "taiwan_data/pilot"
