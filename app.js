@@ -6725,6 +6725,33 @@ var MemberPage = (function() {
     return pool;
   }
 
+  // v1.9.7 團員 id 在本機 members 找不到的（跨裝置建立、本機快取漏同步）
+  function _tripMissingMembers() {
+    var trip = Trips.getById(_selectedTrip);
+    var ids = trip ? (trip.memberIds || []) : [];
+    if (!Array.isArray(ids)) ids = Object.values(ids);
+    return ids.filter(function(id) { return !Members.getById(id); });
+  }
+
+  // v1.9.7 本機缺團員資料 → 自動從 Firebase 補拉會員並刷新下拉（表單開啟中呼叫）
+  function _healTripMembers() {
+    var missing = _tripMissingMembers();
+    if (missing.length === 0) return;
+    if (typeof FirebaseSync === 'undefined' || !FirebaseSync.isReady()) return;
+    FirebaseSync.once(FB_PATH.MEMBERS).then(function(remoteVal) {
+      if (!remoteVal) return;
+      var merged = mergeArray(Store.readArray(STORAGE_KEYS.MEMBERS), Object.values(remoteVal));
+      Store.writeArray(STORAGE_KEYS.MEMBERS, merged);
+      Members.load();
+      // 表單還開著且下拉顯示中 → 用補齊後的資料重渲染
+      var dd = document.getElementById('tx-member-dropdown');
+      if (dd && dd.style.display !== 'none') {
+        var si = document.getElementById('tx-member-search');
+        _renderMemberDropdown(si ? si.value : '');
+      }
+    }).catch(function() {});
+  }
+
   function showAddTx(prefillTx) {
     var trip = Trips.getById(_selectedTrip);
     if (!trip) return;
@@ -6794,6 +6821,7 @@ var MemberPage = (function() {
       _expenseRows = prefillTx.expenses.map(function(e) { return Object.assign({}, e); });
       renderExpenseRows();
     }
+    _healTripMembers(); // v1.9.7 本機缺團員時自動補拉 Firebase 會員資料
   }
 
   // v1.7.0 會員搜尋選擇器
@@ -6809,6 +6837,7 @@ var MemberPage = (function() {
     var dd = document.getElementById('tx-member-dropdown');
     if (!dd) return;
     var members = _tripMemberPool(); // v1.9.6 只列本團會員
+    var missing = _tripMissingMembers(); // v1.9.7 缺員警示
     var q = (query || '').trim().toLowerCase();
     var filtered = members.filter(function(m) {
       if (!q) return true;
@@ -6823,10 +6852,15 @@ var MemberPage = (function() {
       if (bi >= 0) return 1;
       return 0;
     });
+    // v1.9.7 表頭：本團人數 + 缺員警示（避免「團有2人只顯示1人」卻無聲無息）
+    var header = '<div class="member-picker-item member-picker-empty" style="text-align:left;padding:8px 14px;">'
+      + '本團會員 ' + members.length + ' 位'
+      + (missing.length > 0 ? '（⚠ ' + missing.join('、') + ' 本機資料缺失，正嘗試同步…）' : '')
+      + '</div>';
     if (filtered.length === 0) {
-      dd.innerHTML = '<div class="member-picker-item member-picker-empty">找不到會員（僅列出本團 ' + members.length + ' 位會員，如需新增請先於建團/編輯團勾選）</div>';
+      dd.innerHTML = header + '<div class="member-picker-item member-picker-empty">找不到會員（僅列出本團 ' + members.length + ' 位會員，如需新增請先於建團/編輯團勾選）</div>';
     } else {
-      dd.innerHTML = filtered.slice(0, 20).map(function(m) {
+      dd.innerHTML = header + filtered.slice(0, 20).map(function(m) {
         return '<div class="member-picker-item" onclick="MemberPage._selectMember(\'' + escJs(m.id) + '\')">'
           + '<span class="member-picker-name">' + esc(m.name || '') + '</span>'
           + '<span class="member-picker-id">' + esc(m.id) + '</span>'
