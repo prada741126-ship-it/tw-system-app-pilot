@@ -6,7 +6,7 @@
  *   - 其他 → stale-while-revalidate
  */
 
-var CACHE_VERSION = 'tw-app-v1.9.3';  // 2026-08-23 待結帳流程對齊：傳帳給上級=送入待結帳(同時分享明細)、交收完成=封存
+var CACHE_VERSION = 'tw-app-v1.9.4';  /// 2026-08-23 E018走查改善：洗碼手動鎖、帳務日期欄、月匯率沿用上月、建團酒店結構化選單、帳務來源(BOT)標示、傳帳明細含開銷
 var STATIC_CACHE = CACHE_VERSION + '-static';
 var RUNTIME_CACHE = CACHE_VERSION + '-runtime';
 
