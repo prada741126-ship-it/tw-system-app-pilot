@@ -6,7 +6,7 @@
  *   - 其他 → stale-while-revalidate
  */
 
-var CACHE_VERSION = 'tw-app-v1.9.8';  /// 2026-08-23 開銷吸收項金額欄改為「招待」標籤(會員端不顯示數字),並標註不從交收扣除
+var CACHE_VERSION = 'tw-app-v1.9.9';  /// 2026-08-23 交收口徑修正:代理吸收=代理自掏腰包,公司應收總額=會員交收+代理吸收(向代理另收);待結帳/帳務代理面板/歷史/傳帳文字全部對齊
 var STATIC_CACHE = CACHE_VERSION + '-static';
 var RUNTIME_CACHE = CACHE_VERSION + '-runtime';
 
