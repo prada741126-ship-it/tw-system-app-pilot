@@ -1184,9 +1184,21 @@ function calcCommission2(washCode, rate2, rebate2) {
 }
 
 // 开销NT = Σ(amountHK × exchangeRate) 四捨五入
+// v1.9.5 標記 absorbed（代理吸收）的開銷不計入——不從會員交收扣除，由代理自行負擔
 function calcExpensesNT(expenses) {
   if (!expenses || !expenses.length) return 0;
   var total = expenses.reduce(function(sum, e) {
+    if (e.absorbed) return sum;
+    return sum + (e.amountHK || 0) * (e.exchangeRate || 0);
+  }, 0);
+  return Math.round(total);
+}
+
+// v1.9.5 代理吸收開銷NT（單獨列示，向上級交代由代理負擔的金額）
+function calcAbsorbedNT(expenses) {
+  if (!expenses || !expenses.length) return 0;
+  var total = expenses.reduce(function(sum, e) {
+    if (!e.absorbed) return sum;
     return sum + (e.amountHK || 0) * (e.exchangeRate || 0);
   }, 0);
   return Math.round(total);
@@ -1200,7 +1212,8 @@ function calcMemberTx(input) {
   var comm2 = calcCommission2(input.washCode, input.rate2, input.rebate2);
   var subtotal = ntResult + comm1 + comm2;
   var expensesNT = calcExpensesNT(input.expenses);
-  // 總交收NT = 小計 - 開銷NT
+  var absorbedNT = calcAbsorbedNT(input.expenses); // v1.9.5 代理吸收（不扣會員交收）
+  // 總交收NT = 小計 - 開銷NT（代理吸收的不扣）
   var totalSettlement = subtotal - expensesNT;
   var settlementAmount = roundDown(totalSettlement, -2);
   var verifyStatus = verifyUpDown(upDown, input.customerUp, input.customerDown);
@@ -1212,6 +1225,7 @@ function calcMemberTx(input) {
     commission2: comm2,
     subtotal: subtotal,
     expensesNT: expensesNT,
+    absorbedNT: absorbedNT,
     totalSettlement: totalSettlement,
     settlementAmount: settlementAmount,
     verifyStatus: verifyStatus,
@@ -1226,6 +1240,7 @@ if (typeof module !== 'undefined' && module.exports) {
     calcCommission1: calcCommission1,
     calcCommission2: calcCommission2,
     calcExpensesNT: calcExpensesNT,
+    calcAbsorbedNT: calcAbsorbedNT,
     calcMemberTx: calcMemberTx,
   };
 }
@@ -4984,12 +4999,17 @@ var PdfExport = (function() {
         var nt = (e.amountHK || 0) * (e.exchangeRate || 0);
         var qtyLabel = (e.quantity && e.quantity > 1) ? ' ×' + e.quantity : '';
         html += '<tr>';
-        html += '<td>' + _escapeHtml((e.name || '') + qtyLabel) + '</td>';
+        html += '<td>' + _escapeHtml((e.name || '') + qtyLabel) + (e.absorbed ? ' <span class="tx-absorb-tag" title="由代理自行負擔，不從會員交收扣除">代理吸收</span>' : '') + '</td>';
         html += '<td class="num">' + fmtCardNum(e.amountHK || 0) + '</td>';
         html += '<td class="num">' + (e.exchangeRate || 0) + '</td>';
         html += '<td class="num">' + fmtNum(Math.round(nt)) + '</td>';
         html += '</tr>';
       });
+      // v1.9.5 代理吸收合計（單獨列示，不計入總交收）
+      var absTotal = calcAbsorbedNT(expenses);
+      if (absTotal > 0) {
+        html += '<tr class="exp-absorb-total"><td>代理吸收合計（不從交收扣除）</td><td></td><td></td><td class="num">' + fmtNum(absTotal) + '</td></tr>';
+      }
       html += '</tbody></table>';
     }
     html += '</div>';
@@ -6072,12 +6092,17 @@ var PendingPage = (function() {
           var nt = (e.amountHK || 0) * (e.exchangeRate || 0);
           var qtyLabel = (e.quantity && e.quantity > 1) ? ' \u00d7' + e.quantity : '';
           html += '<div class="mb-card-expense-row">';
-          html += '<span>' + (e.name || '') + qtyLabel + '</span>';
+          html += '<span>' + (e.name || '') + qtyLabel + (e.absorbed ? ' <span class="tx-absorb-tag">代理吸收</span>' : '') + '</span>';
           html += '<span>' + fmtCardNum(e.amountHK || 0) + '</span>';
           html += '<span>' + (e.exchangeRate || 0) + '</span>';
           html += '<span>' + fmtCardNum(Math.round(nt)) + '</span>';
           html += '</div>';
         });
+        // v1.9.5 代理吸收合計（單獨列示，不計入總交收）
+        var absTotal = calcAbsorbedNT(expenses);
+        if (absTotal > 0) {
+          html += '<div class="mb-card-expense-row exp-absorb-total-row"><span>代理吸收合計</span><span></span><span></span><span>' + fmtCardNum(absTotal) + '</span></div>';
+        }
         html += '</div>';
       }
       html += '</div>';
@@ -6140,16 +6165,23 @@ var PendingPage = (function() {
       .reduce(function(s, sup) { return s + (sup.settlementAmount || 0); }, 0);
 
     // 按會員分組（同卡片匯總表）；v1.9.4 同時彙總各會員開銷明細，讓上級看得到錢花在哪
+    // v1.9.5 代理吸收的開銷單獨列示（由代理負擔，不從會員交收扣除）
     var memberGroups = {};
     mtxs.forEach(function(tx) {
       var mid = tx.memberId;
-      if (!memberGroups[mid]) memberGroups[mid] = { totalSettle: 0, hallName: '', expNT: 0, expList: [] };
+      if (!memberGroups[mid]) memberGroups[mid] = { totalSettle: 0, hallName: '', expNT: 0, expList: [], absNT: 0, absList: [] };
       memberGroups[mid].totalSettle += calcTotalNT(tx);
       if (!memberGroups[mid].hallName) memberGroups[mid].hallName = getHallName(tx, trip);
       (tx.expenses || []).forEach(function(e) {
-        memberGroups[mid].expNT += (e.amountHK || 0) * (e.exchangeRate || 0);
         var q = (e.quantity && e.quantity > 1) ? '×' + e.quantity : '';
-        memberGroups[mid].expList.push((e.name || '項目') + q + ' ' + fmtCardNum(e.amountHK || 0) + 'HK');
+        var item = (e.name || '項目') + q + ' ' + fmtCardNum(e.amountHK || 0) + 'HK';
+        if (e.absorbed) {
+          memberGroups[mid].absNT += (e.amountHK || 0) * (e.exchangeRate || 0);
+          memberGroups[mid].absList.push(item);
+        } else {
+          memberGroups[mid].expNT += (e.amountHK || 0) * (e.exchangeRate || 0);
+          memberGroups[mid].expList.push(item);
+        }
       });
     });
 
@@ -6170,6 +6202,7 @@ var PendingPage = (function() {
         var m = Members.getById(mid);
         lines.push((m ? maskName(m.name) : mid) + '（' + g.hallName + '）交收 NT$ ' + fmtCardNum(Math.round(g.totalSettle)));
         if (g.expList.length > 0) lines.push('　開銷: ' + g.expList.join('、') + '（NT$ ' + fmtCardNum(Math.round(g.expNT)) + '，已從交收扣除）');
+        if (g.absList.length > 0) lines.push('　代理吸收: ' + g.absList.join('、') + '（NT$ ' + fmtCardNum(Math.round(g.absNT)) + '，由代理負擔，不從交收扣除）');
       });
       lines.push('──── 合計 NT$ ' + fmtCardNum(Math.trunc(totalSettle / 100) * 100) + ' ────');
     } else {
@@ -6911,6 +6944,8 @@ var MemberPage = (function() {
       html += '<input type="number" step="1" min="1" placeholder="數量" class="form-input" style="width:60px;flex:0 0 60px;" value="' + (row.quantity || 1) + '" oninput="MemberPage._updExp(' + i + ',\'quantity\',this.value)">';
       html += '<input type="number" placeholder="金額" class="form-input exp-amt" style="width:80px;flex:0 0 80px;" value="' + (row.amountHK || 0) + '" onchange="MemberPage._updExp(' + i + ',\'amountHK\',this.value)">';
       html += '<input type="number" step="0.01" placeholder="匯率" class="form-input" style="width:60px;flex:0 0 60px;" value="' + (row.exchangeRate || _defaultExchangeRate()) + '" onchange="MemberPage._updExp(' + i + ',\'exchangeRate\',this.value)">';
+      // v1.9.5 代理吸收：此筆開銷由代理自行負擔，不從會員交收扣除（例：代購蛋塔由上級代理招待）
+      html += '<label class="exp-absorb" title="由代理自行吸收，不從會員交收扣除"><input type="checkbox"' + (row.absorbed ? ' checked' : '') + ' onchange="MemberPage._updExp(' + i + ',\'absorbed\',this.checked)"><span>吸收</span></label>';
       html += '<button class="btn-sm btn-danger" onclick="MemberPage._delExp(' + i + ')" style="flex:0 0 32px;padding:4px;">×</button>';
       html += '</div>';
       // 非其他時顯示單價提示（房費不顯示）
@@ -6950,7 +6985,12 @@ var MemberPage = (function() {
   }
   function _updExp(i, field, val) {
     if (!_expenseRows[i]) return;
-    if (field === 'name') {
+    if (field === 'absorbed') {
+      // v1.9.5 代理吸收（boolean）
+      _expenseRows[i].absorbed = !!val;
+      var rowEl = document.querySelector('.expense-row[data-idx="' + i + '"]');
+      if (rowEl) rowEl.style.opacity = val ? '0.65' : '';
+    } else if (field === 'name') {
       _expenseRows[i][field] = val;
     } else if (field === 'quantity') {
       // 允許空字串暫存，不強制 || 1，避免 BACKSPACE 刪不掉
@@ -10550,12 +10590,17 @@ var HistoryPage = (function() {
           var nt = (e.amountHK || 0) * (e.exchangeRate || 0);
           var qtyLabel = (e.quantity && e.quantity > 1) ? ' ×' + e.quantity : '';
           html += '<div class="mb-card-expense-row">';
-          html += '<span>' + (e.name || '') + qtyLabel + '</span>';
+          html += '<span>' + (e.name || '') + qtyLabel + (e.absorbed ? ' <span class="tx-absorb-tag">代理吸收</span>' : '') + '</span>';
           html += '<span>' + fmtCardNum(e.amountHK || 0) + '</span>';
           html += '<span>' + (e.exchangeRate || 0) + '</span>';
           html += '<span>' + fmtCardNum(Math.round(nt)) + '</span>';
           html += '</div>';
         });
+        // v1.9.5 代理吸收合計（單獨列示，不計入總交收）
+        var absTotal = calcAbsorbedNT(expenses);
+        if (absTotal > 0) {
+          html += '<div class="mb-card-expense-row exp-absorb-total-row"><span>代理吸收合計</span><span></span><span></span><span>' + fmtCardNum(absTotal) + '</span></div>';
+        }
         html += '</div>';
       }
       html += '</div>';
