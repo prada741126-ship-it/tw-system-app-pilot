@@ -6,7 +6,7 @@
  *   - 其他 → stale-while-revalidate
  */
 
-var CACHE_VERSION = 'tw-app-v1.9.4';  /// 2026-08-23 E018走查改善：洗碼手動鎖、帳務日期欄、月匯率沿用上月、建團酒店結構化選單、帳務來源(BOT)標示、傳帳明細含開銷
+var CACHE_VERSION = 'tw-app-v1.9.5';  /// 2026-08-23 開銷可標記「代理吸收」(不從會員交收扣除,由代理負擔);BOT帳可手動編輯
 var STATIC_CACHE = CACHE_VERSION + '-static';
 var RUNTIME_CACHE = CACHE_VERSION + '-runtime';
 
