@@ -3783,6 +3783,32 @@ var Wallet = (function() {
     return true;
   }
 
+  // v2.1.1 開帳可編輯（key 錯時修正；金額改對即可，不影響其他流水）
+  function updateOpen(id, data) {
+    var arr = State.get('walletTxs') || [];
+    var idx = arr.findIndex(function(w) { return w.id === id; });
+    if (idx < 0 || arr[idx].type !== 'open') return null;
+    Object.assign(arr[idx], {
+      amountHKD: Math.round(data.amountHKD) || 0,
+      date: data.date || arr[idx].date,
+      note: data.note !== undefined ? data.note : (arr[idx].note || ''),
+      _updatedAt: Date.now(),
+    });
+    Schema.sanitize('walletTxs', arr[idx]);
+    save(arr);
+    var obj = {}; obj[arr[idx]._fbKey] = arr[idx];
+    enqueue(FB_PATH.WALLET_TXS, obj);
+    return arr[idx];
+  }
+  // v2.1.1 開帳刪除：僅當錢包只剩這一筆開帳時允許（回到未開帳可重開；有其他流水請改用編輯）
+  function removeOpen(id) {
+    var alive = getAll();
+    if (alive.length !== 1) return false;
+    if (!alive[0] || alive[0].id !== id || alive[0].type !== 'open') return false;
+    _removeById(id);
+    return true;
+  }
+
   return {
     load: load, save: save, getAll: getAll, getById: getById, balance: balance,
     chipNetHKD: chipNetHKD, expensePayoutHKD: expensePayoutHKD,
@@ -3790,6 +3816,7 @@ var Wallet = (function() {
     syncForPend: syncForPend, removeForPend: removeForPend, reconcilePends: reconcilePends, pendPayoutHKD: pendPayoutHKD,
     isOpened: isOpened, openAccount: openAccount,
     addManual: addManual, updateManual: updateManual, removeManual: removeManual,
+    updateOpen: updateOpen, removeOpen: removeOpen,
   };
 })();
 
@@ -8306,7 +8333,7 @@ var WalletPage = (function() {
     html += '</div>';
 
     html += '<div class="wallet-toolbar"><button class="btn btn-primary" onclick="WalletPage.showAddManual()">＋ 補登</button></div>';
-    html += '<p class="section-desc">只記實際掏出/收回的港幣現鈔；交收回款走結算系統不進錢包。點列可展開明細（自動流水由帳務產生，如需修改請改帳務）。</p>';
+    html += '<p class="section-desc">只記實際掏出/收回的港幣現鈔；交收回款走結算系統不進錢包。點列可展開明細與編輯／刪除（自動流水不可直接改，請點「前往修改來源」改原單，錢包會自動更新）。</p>';
 
     var list = entries.slice().reverse();
     if (list.length === 0) {
@@ -8329,6 +8356,22 @@ var WalletPage = (function() {
           html += '<div class="wallet-item-actions">'
             + '<button class="btn-sm" onclick="event.stopPropagation();WalletPage.showEditManual(\'' + escJs(w.id) + '\')">編輯</button> '
             + '<button class="btn-sm btn-danger" onclick="event.stopPropagation();WalletPage.delManual(\'' + escJs(w.id) + '\')">刪除</button>'
+            + '</div>';
+        }
+        if (isOpen && w.type === 'open') { // v2.1.1 開帳可編輯/刪除（key 錯修正）
+          html += '<div class="wallet-item-actions">'
+            + '<button class="btn-sm" onclick="event.stopPropagation();WalletPage.showEditOpen(\'' + escJs(w.id) + '\')">編輯</button> '
+            + '<button class="btn-sm btn-danger" onclick="event.stopPropagation();WalletPage.delOpen(\'' + escJs(w.id) + '\')">刪除</button>'
+            + '</div>';
+        }
+        if (isOpen && (w.type === 'member_tx' || w.type === 'credit_tx' || w.type === 'expense')) { // v2.1.1 跳去改來源帳務
+          html += '<div class="wallet-item-actions">'
+            + '<button class="btn-sm" onclick="event.stopPropagation();WalletPage.gotoSource(\'' + escJs(w.id) + '\')">前往修改來源帳務</button>'
+            + '</div>';
+        }
+        if (isOpen && w.type === 'pexp') { // v2.1.1 跳去該團預支卡
+          html += '<div class="wallet-item-actions">'
+            + '<button class="btn-sm" onclick="event.stopPropagation();WalletPage.gotoPend(\'' + escJs(w.id) + '\')">前往預支開銷</button>'
             + '</div>';
         }
         html += '</div>';
@@ -8432,6 +8475,62 @@ var WalletPage = (function() {
     });
   }
 
+  // ===== v2.1.1 開帳編輯/刪除 + 自動流水跳轉來源 =====
+  function showEditOpen(id) {
+    var w = Wallet.getById(id);
+    if (!w || w.type !== 'open') return;
+    var html = '';
+    html += '<div class="form-group"><label>開帳金額(HK$)</label><input type="number" inputmode="decimal" step="1" min="0" id="wo-amt" class="form-input" value="' + (w.amountHKD || 0) + '"></div>';
+    html += '<div class="form-group"><label>開帳日期</label><input type="date" id="wo-date" class="form-input" value="' + (w.date || TWDate.todayStr()) + '"></div>';
+    html += '<div class="form-group"><label>備註</label><input type="text" id="wo-note" class="form-input" value="' + escAttr(w.note || '') + '"></div>';
+    html += '<div class="row-actions"><button class="btn btn-primary" onclick="WalletPage.saveEditOpen(\'' + id + '\')">儲存</button></div>';
+    Modal.open('編輯開帳', html);
+  }
+  function saveEditOpen(id) {
+    var amt = parseFloat(document.getElementById('wo-amt').value);
+    if (isNaN(amt) || amt < 0) { Toast.error('請輸入正確金額'); return; }
+    Wallet.updateOpen(id, {
+      amountHKD: amt,
+      date: document.getElementById('wo-date').value || TWDate.todayStr(),
+      note: document.getElementById('wo-note').value || '',
+    });
+    Modal.close();
+    Toast.success('開帳已更新');
+    render();
+  }
+  function delOpen(id) {
+    Modal.confirm('確定刪除開帳？僅限錢包只有開帳這一筆時可刪（刪後回到未開帳，可重新開帳）。', function() {
+      if (Wallet.removeOpen(id)) {
+        Toast.success('已刪除開帳，請重新開帳');
+        render();
+      } else {
+        Toast.error('錢包已有其他流水，不可刪開帳（請改用「編輯」修正金額）');
+      }
+    });
+  }
+  /** 跳到來源帳務編輯（改完存檔，錢包流水自動跟著更新） */
+  function gotoSource(wid) {
+    var w = Wallet.getById(wid);
+    if (!w || !w.refId) { Toast.error('找不到來源'); return; }
+    var tx = (typeof MemberTxs !== 'undefined') ? MemberTxs.getById(w.refId) : null;
+    if (!tx) { Toast.error('來源帳務已不存在（流水將自動清理）'); try { Wallet.reconcileAll(); } catch (e) {} render(); return; }
+    Router.go('member');
+    MemberPage.selectTrip(tx.tripId);
+    setTimeout(function() {
+      try { MemberPage.editTx(tx.id); } catch (e) { Toast.warning('此帳務在待結帳/封存中，不可編輯'); }
+    }, 150);
+  }
+  /** 跳到該團的預支開銷卡（可編輯/刪除預支單） */
+  function gotoPend(wid) {
+    var w = Wallet.getById(wid);
+    if (!w || !w.refId) { Toast.error('找不到來源'); return; }
+    var p = (typeof PendExps !== 'undefined') ? PendExps.getById(w.refId) : null;
+    if (!p) { Toast.error('預支單已不存在（流水將自動清理）'); try { Wallet.reconcilePends(); } catch (e) {} render(); return; }
+    Router.go('member');
+    MemberPage.selectTrip(p.tripId);
+    Toast.info('已切到 ' + (typeof Trips !== 'undefined' ? Trips.displayName(p.tripId) : p.tripId) + '，預支卡可編輯/刪除');
+  }
+
   // 錢包資料同步後自動刷新（目前在錢包頁時）
   EventBus.on(EVENTS.WALLET_TXS_LOADED, function() {
     if (typeof Router !== 'undefined' && Router.getCurrent() === 'wallet') {
@@ -8444,6 +8543,8 @@ var WalletPage = (function() {
     saveOpen: saveOpen,
     showAddManual: showAddManual, saveManual: saveManual,
     showEditManual: showEditManual, saveEditManual: saveEditManual, delManual: delManual,
+    showEditOpen: showEditOpen, saveEditOpen: saveEditOpen, delOpen: delOpen, // v2.1.1
+    gotoSource: gotoSource, gotoPend: gotoPend, // v2.1.1
   };
 })();
 
