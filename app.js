@@ -70,6 +70,7 @@ var STORAGE_KEYS = {
   MEMBER_TXS:        STORAGE_PREFIX + 'member_txs',
   WALLET_TXS:        STORAGE_PREFIX + 'wallet_txs',
   PENDING_EXPS:      STORAGE_PREFIX + 'pending_exps', // v2.1 預支開銷（先記帳後歸屬）
+  CATALOG:           STORAGE_PREFIX + 'catalog',          // v2.2.2 品項主檔（水舞間/水樂園等常用票券固定價）
   LOANS:             STORAGE_PREFIX + 'loans', // v2.2 港幣借支（借出→回收→未回收追蹤）
   BOOKINGS:          STORAGE_PREFIX + 'bookings',
   SUPPLEMENTS:       STORAGE_PREFIX + 'supplements',
@@ -124,6 +125,7 @@ var FB_PATH = {
   MEMBER_TXS:     FB_DATA_ROOT + '/memberTxs',
   WALLET_TXS:     FB_DATA_ROOT + '/walletTxs', // v2.0 港幣現鈔錢包流水
   PENDING_EXPS:   FB_DATA_ROOT + '/pendingExps', // v2.1 預支開銷（先記帳後歸屬）
+  CATALOG:        FB_DATA_ROOT + '/catalog',      // v2.2.2 品項主檔（常用票券＋預設單價）
   LOANS:          FB_DATA_ROOT + '/loans', // v2.2 港幣借支
   BOOKINGS:       FB_DATA_ROOT + '/bookings',
   SUPPLEMENTS:    FB_DATA_ROOT + '/supplements',
@@ -173,6 +175,7 @@ var EVENTS = {
   PEXP_UPDATED:      'pexp:updated',
   PEXP_DELETED:      'pexp:deleted',
   PENDING_EXPS_LOADED: 'pendingExps', // v2.1（與 State key 同名）
+  CATALOG_CREATED: 'catalog:created', CATALOG_UPDATED: 'catalog:updated', CATALOG_DELETED: 'catalog:deleted', CATALOG_LOADED: 'catalog:loaded', // v2.2.2
   LOAN_CREATED:      'loan:created', // v2.2 港幣借支
   LOAN_UPDATED:      'loan:updated',
   LOAN_DELETED:      'loan:deleted',
@@ -225,6 +228,7 @@ var STATE_EVENTS = {
   memberTxs:     'memberTxs',
   walletTxs:     EVENTS.WALLET_TXS_LOADED,
   pendingExps:   EVENTS.PENDING_EXPS_LOADED, // v2.1 預支開銷
+  catalog:       EVENTS.CATALOG_LOADED,     // v2.2.2 品項主檔
   loans:         EVENTS.LOANS_LOADED, // v2.2 港幣借支
   bookings:      EVENTS.BOOKINGS_LOADED,
   supplements:   'supplements',
@@ -564,6 +568,7 @@ var State = (function() {
     memberTxs: [],
     walletTxs: [], // v2.0 港幣現鈔錢包流水
     pendingExps: [], // v2.1 預支開銷
+    catalog:     [], // v2.2.2 品項主檔（常用票券＋預設單價）
     loans: [], // v2.2 港幣借支
     bookings: [],
     supplements: [],
@@ -727,10 +732,9 @@ var Schema = (function() {
       id: 's!', type: 's', amountHKD: 'n', date: 'd',
       refId: 's', tripId: 's', memberId: 's', category: 's', note: 's',
     },
-    pendingExps: { // v2.1 預支開銷（先記帳後歸屬）
+    pendingExps: { // v2.1 預支開銷（先記帳後歸屬）；memberId 為 v2.2.1 備註會員（純顯示，帶入帳務時仍可細分給任何人）
       id: 's!', tripId: 's!', date: 'd', note: 's',
-      agentId: 's', shareholderId: 's', rows: 'a',
-      memberId: 's', // v2.2.1 備註會員（純顯示，帶入帳務時仍可細分給任何人）
+      agentId: 's', shareholderId: 's', memberId: 's', rows: 'a',
     },
     loans: { // v2.2 港幣借支（純現金借貸，不與帳務回碼/上下分抵銷）
       id: 's!', memberId: 's', date: 'd', note: 's',
@@ -958,6 +962,7 @@ var Perm = (function() {
     memberTxs:     ['member', 'membersMgmt'],
     walletTxs:     ['wallet'], // v2.0 港幣現鈔錢包
     pendingExps:   ['member'], // v2.1 預支開銷（帳務頁操作，隨帳務權限）
+    catalog:       ['member'], // v2.2.2 品項主檔（員工常用，隨會員頁權限）
     loans:         ['wallet'], // v2.2 港幣借支（錢包頁操作）
     trips:         ['member', 'pending'],
     supplements:   ['fees', 'member'],
@@ -2929,6 +2934,7 @@ function _setupWatchers() {
     { key: 'MEMBER_TXS',    storeKey: STORAGE_KEYS.MEMBER_TXS,    event: EVENTS.MTX_LOADED,           stateKey: 'memberTxs' },
     { key: 'WALLET_TXS',    storeKey: STORAGE_KEYS.WALLET_TXS,    event: EVENTS.WALLET_TXS_LOADED,    stateKey: 'walletTxs' },
     { key: 'PENDING_EXPS',   storeKey: STORAGE_KEYS.PENDING_EXPS,   event: EVENTS.PENDING_EXPS_LOADED,  stateKey: 'pendingExps' }, // v2.1 預支開銷
+    { key: 'CATALOG',        storeKey: STORAGE_KEYS.CATALOG,        event: EVENTS.CATALOG_LOADED,       stateKey: 'catalog' },          // v2.2.2 品項主檔
     { key: 'LOANS',          storeKey: STORAGE_KEYS.LOANS,          event: EVENTS.LOANS_LOADED,         stateKey: 'loans' }, // v2.2 港幣借支
     { key: 'BOOKINGS',      storeKey: STORAGE_KEYS.BOOKINGS,      event: EVENTS.BOOKINGS_LOADED,      stateKey: 'bookings' },
     { key: 'SUPPLEMENTS',   storeKey: STORAGE_KEYS.SUPPLEMENTS,   event: EVENTS.SYNC_COMPLETE,        stateKey: 'supplements' },
@@ -3034,7 +3040,7 @@ function _setupWatchers() {
 function _resyncAll() {
   var syncPaths = [
     FB_PATH.MEMBERS, FB_PATH.AGENTS, FB_PATH.SHAREHOLDERS,
-    FB_PATH.TRIPS, FB_PATH.MEMBER_TXS, FB_PATH.WALLET_TXS, FB_PATH.PENDING_EXPS, FB_PATH.LOANS, FB_PATH.BOOKINGS,
+    FB_PATH.TRIPS, FB_PATH.MEMBER_TXS, FB_PATH.WALLET_TXS, FB_PATH.PENDING_EXPS, FB_PATH.LOANS, FB_PATH.CATALOG, FB_PATH.BOOKINGS,
     FB_PATH.SUPPLEMENTS, FB_PATH.SETTINGS, FB_PATH.EXTRA_INCOME,
     FB_PATH.HOTEL_CONFIG, FB_PATH.USERS,
     FB_PATH.AUDIT_LOG,
@@ -3048,6 +3054,7 @@ function _resyncAll() {
   storeMap[FB_PATH.WALLET_TXS]    = { storeKey: STORAGE_KEYS.WALLET_TXS,    event: EVENTS.WALLET_TXS_LOADED,    stateKey: 'walletTxs' }; // v2.0 錢包
   storeMap[FB_PATH.PENDING_EXPS]  = { storeKey: STORAGE_KEYS.PENDING_EXPS,  event: EVENTS.PENDING_EXPS_LOADED,  stateKey: 'pendingExps' }; // v2.1 預支開銷
   storeMap[FB_PATH.LOANS]         = { storeKey: STORAGE_KEYS.LOANS,         event: EVENTS.LOANS_LOADED,         stateKey: 'loans' }; // v2.2 港幣借支
+  storeMap[FB_PATH.CATALOG]       = { storeKey: STORAGE_KEYS.CATALOG,       event: EVENTS.CATALOG_LOADED,       stateKey: 'catalog' }; // v2.2.2 品項主檔
   storeMap[FB_PATH.BOOKINGS]      = { storeKey: STORAGE_KEYS.BOOKINGS,      event: EVENTS.BOOKINGS_LOADED,      stateKey: 'bookings' };
   storeMap[FB_PATH.SUPPLEMENTS]   = { storeKey: STORAGE_KEYS.SUPPLEMENTS,   event: EVENTS.SYNC_COMPLETE,        stateKey: 'supplements' };
   storeMap[FB_PATH.SETTINGS]      = { storeKey: STORAGE_KEYS.SETTINGS,      event: EVENTS.SETTINGS_LOADED,      stateKey: 'settings' };
@@ -4201,6 +4208,152 @@ var Loans = (function() {
     load: load, save: save, getAll: getAll, getById: getById, getByMember: getByMember,
     repaidTotal: repaidTotal, outstanding: outstanding, openLoans: openLoans, openTotalByMember: openTotalByMember,
     create: create, update: update, repay: repay, removeRepayment: removeRepayment, remove: remove,
+  };
+})();
+
+
+// === src/data/catalog.js ===
+/**
+ * data/catalog.js — 品項主檔 v2.2.2
+ * 依賴: core/constants.js, core/schema.js, core/events.js, core/state.js, core/store.js, sync/uploader.js
+ * 預載常用票券單價，可隨時 CRUD；墊付／預支／帳務開銷三處皆可選擇帶入預設單價。
+ */
+var Catalog = (function() {
+  // 預設單價先留 0，使用者第一次使用後到「品項設定」補單價；後續選取即自動帶入。
+  var SEED_ITEMS = [
+    { name: '水舞間（普通席）', category: 'show', defaultPriceHK: 0 },
+    { name: '水舞間（豪華席）', category: 'show', defaultPriceHK: 0 },
+    { name: '水舞間（VIP 席）', category: 'show', defaultPriceHK: 0 },
+    { name: '新濠天地 - 水樂園門票', category: 'park', defaultPriceHK: 0 },
+    { name: '新濠影匯 - 童夢天地', category: 'park', defaultPriceHK: 0 },
+    { name: '巴黎人 - 巴黎鐵塔', category: 'tower', defaultPriceHK: 0 },
+    { name: '巴黎人 - teamLab 門票', category: 'show', defaultPriceHK: 0 },
+    { name: '永利皇宮 - 觀光纜車', category: 'transport', defaultPriceHK: 0 },
+    { name: '美獅美高梅 - 悠然自得', category: 'show', defaultPriceHK: 0 },
+    { name: '摩珀斯酒店 - 餐飲券', category: 'food', defaultPriceHK: 0 },
+  ];
+  var CATEGORY_LABELS = {
+    show: '表演/門票',
+    park: '樂園',
+    tower: '觀景塔',
+    transport: '交通/纜車',
+    food: '餐飲',
+    hotel: '酒店',
+    other: '其他',
+  };
+
+  function load() {
+    var arr = Store.readArray(STORAGE_KEYS.CATALOG);
+    if (!arr || arr.length === 0) {
+      // 首次載入 seed
+      var now = Date.now();
+      arr = SEED_ITEMS.map(function(it, i) {
+        return {
+          id: 'CATS' + (now + i),
+          name: it.name,
+          defaultPriceHK: it.defaultPriceHK || 0,
+          category: it.category || 'other',
+          isSeed: true,
+          createdAt: now,
+          _fbKey: 'CATS' + (now + i),
+          _updatedAt: now,
+        };
+      });
+      save(arr);
+    }
+    State.set('catalog', arr);
+    return arr;
+  }
+  function save(arr) {
+    Store.writeArray(STORAGE_KEYS.CATALOG, arr);
+    State.set('catalog', arr);
+  }
+  function getAll() {
+    return (State.get('catalog') || []).filter(function(c) { return !c._deleted; });
+  }
+  function getById(id) {
+    return getAll().find(function(c) { return c.id === id; });
+  }
+  /** 依名稱查（用於避免重複新增同名品項） */
+  function findByName(name) {
+    if (!name) return null;
+    var n = String(name).trim();
+    return getAll().find(function(c) { return c.name === n; }) || null;
+  }
+  function byCategory(cat) {
+    return getAll().filter(function(c) { return c.category === cat; }).sort(function(a, b) { return a.name.localeCompare(b.name, 'zh'); });
+  }
+  function categoryLabel(cat) { return CATEGORY_LABELS[cat] || '其他'; }
+  function allCategories() {
+    var seen = {}; var order = [];
+    getAll().forEach(function(c) { if (c.category && !seen[c.category]) { seen[c.category] = 1; order.push(c.category); } });
+    return order;
+  }
+
+  function create(data) {
+    if (!data || !data.name) return null;
+    var name = String(data.name).trim();
+    if (!name) return null;
+    // 重名檢查
+    if (findByName(name)) return null;
+    var now = Date.now();
+    var uid = 'CAT' + now + '_' + Math.random().toString(36).slice(2, 6);
+    var c = {
+      id: uid,
+      name: name,
+      defaultPriceHK: Math.round(data.defaultPriceHK || 0),
+      category: data.category || 'other',
+      isSeed: false,
+      createdAt: now,
+      _fbKey: uid,
+      _updatedAt: now,
+    };
+    if (!Schema.sanitize('catalog', c)) return null;
+    var arr = State.get('catalog') || [];
+    arr.push(c);
+    save(arr);
+    var obj = {}; obj[c._fbKey] = c;
+    enqueue(FB_PATH.CATALOG, obj);
+    EventBus.emit(EVENTS.CATALOG_CREATED, c);
+    return c;
+  }
+  function update(id, patch) {
+    var arr = State.get('catalog') || [];
+    var idx = arr.findIndex(function(c) { return c.id === id; });
+    if (idx < 0) return null;
+    var merged = Object.assign({}, arr[idx], patch);
+    merged.name = String(merged.name || '').trim();
+    merged.defaultPriceHK = Math.round(merged.defaultPriceHK || 0);
+    if (!merged.name) return null;
+    // 重名檢查（排除自己）
+    var dup = getAll().find(function(c) { return c.name === merged.name && c.id !== id; });
+    if (dup) return null;
+    if (!Schema.sanitize('catalog', merged)) return null;
+    Object.assign(arr[idx], merged, { _updatedAt: Date.now() });
+    save(arr);
+    var obj = {}; obj[arr[idx]._fbKey] = arr[idx];
+    enqueue(FB_PATH.CATALOG, obj);
+    EventBus.emit(EVENTS.CATALOG_UPDATED, arr[idx]);
+    return arr[idx];
+  }
+  function remove(id) {
+    var arr = State.get('catalog') || [];
+    var idx = arr.findIndex(function(c) { return c.id === id; });
+    if (idx < 0) return;
+    arr[idx]._deleted = true;
+    arr[idx]._updatedAt = Date.now();
+    save(arr);
+    var obj = {}; obj[arr[idx]._fbKey] = arr[idx];
+    enqueue(FB_PATH.CATALOG, obj);
+    EventBus.emit(EVENTS.CATALOG_DELETED, id);
+  }
+
+  return {
+    load: load, save: save, getAll: getAll, getById: getById,
+    findByName: findByName, byCategory: byCategory,
+    allCategories: allCategories, categoryLabel: categoryLabel,
+    create: create, update: update, remove: remove,
+    CATEGORY_LABELS: CATEGORY_LABELS,
   };
 })();
 
@@ -7869,7 +8022,20 @@ var MemberPage = (function() {
         html += '<option value="wp"' + (row.ticketType === 'wp' ? ' selected' : '') + '>水上樂園手帶 (' + wp.guestPrice + ')</option>';
         html += '</select>';
         if (row.ticketType === 'other' || !row.ticketType) {
-          html += '<input type="text" placeholder="項目名稱" class="form-input" style="flex:1;min-width:80px;" value="' + (row.name || '') + '" onchange="MemberPage._updExp(' + i + ',\'name\',this.value)">';
+          // v2.2.2 品項主檔：catalog 下拉快速選取＋自動帶預設單價
+          var preset = Catalog.findByName(row.name);
+          var selCat = preset ? preset.id : '__custom__';
+          html += '<div style="flex:1;min-width:140px;display:flex;flex-direction:column;gap:3px;">'
+            + '<select class="form-input" style="flex:1;min-width:100px;" onchange="MemberPage._updExpCatalog(' + i + ',this.value,this)">'
+            + '<option value="__custom__"' + (selCat === '__custom__' ? ' selected' : '') + '>＋ 自訂品名…</option>';
+          Catalog.getAll().slice().sort(function(a, b) { return a.name.localeCompare(b.name, 'zh'); }).forEach(function(c) {
+            var sel = (selCat === c.id) ? ' selected' : '';
+            var lbl = c.name + (c.defaultPriceHK ? '（HK$ ' + c.defaultPriceHK + '）' : '');
+            html += '<option value="' + escAttr(c.id) + '"' + sel + '>' + esc(lbl) + '</option>';
+          });
+          html += '</select>'
+            + '<input type="text" placeholder="項目名稱" class="form-input" style="flex:1;min-width:80px;" value="' + escAttr(row.name || '') + '" onchange="MemberPage._updExp(' + i + ',\'name\',this.value)">'
+            + '</div>';
         } else {
           html += '<span style="flex:1;min-width:80px;display:flex;align-items:center;font-size:var(--font-size-sm);color:var(--text-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + (row.name || '') + '</span>';
         }
@@ -7980,6 +8146,38 @@ var MemberPage = (function() {
     } else {
       row[field] = parseFloat(val) || 0;
     }
+  }
+  // v2.2.2 品項主檔：選 catalog 自動帶 name + unitPrice + ourPrice，並刷新金額欄
+  function _updExpCatalog(i, val, sel) {
+    if (!_expenseRows[i]) return;
+    var row = _expenseRows[i];
+    if (val === '__custom__') return; // 自訂不動 row，由用戶在 name 輸入框自由打
+    var item = Catalog.getById(val);
+    if (!item) return;
+    var prevName = row.name;
+    row.name = item.name;
+    // 若 unitPrice 未設或等於原品名單價，自動帶入
+    if (!row.unitPrice || row.unitPrice === 0) {
+      if (item.defaultPriceHK > 0) row.unitPrice = item.defaultPriceHK;
+    }
+    if (!row.ourPrice || row.ourPrice === 0) {
+      if (item.defaultPriceHK > 0) row.ourPrice = item.defaultPriceHK;
+    }
+    // amountHK 未手動改過 → 同步成 unitPrice × quantity
+    var qty = row.quantity || 1;
+    if (row.unitPrice) {
+      var prevAuto = (prevName === '') || (row.amountHK === 0) || (row.unitPrice && row.amountHK === row.unitPrice * qty);
+      if (prevAuto) row.amountHK = Math.round((row.unitPrice * qty) * 100) / 100;
+      if (!row.payoutManual) row.payout = _expPayoutDefault(row);
+    }
+    // 同步畫面金額/實支欄
+    var amtInput = document.querySelector('.expense-row[data-idx="' + i + '"] .exp-amt');
+    if (amtInput) amtInput.value = row.amountHK;
+    var payInput = document.querySelector('.expense-row[data-idx="' + i + '"] .exp-pay');
+    if (payInput) payInput.value = row.payout || 0;
+    // 同步名稱輸入框（讓用戶看到當前選的）
+    var nameInput = sel && sel.parentNode ? sel.parentNode.querySelector('input[placeholder="項目名稱"]') : null;
+    if (nameInput) nameInput.value = item.name;
   }
   function _delExp(i) {
     _expenseRows.splice(i, 1);
@@ -8449,7 +8647,7 @@ var MemberPage = (function() {
     onMemberSearch: onMemberSearch, searchMember: searchMember,
     showAddTx: showAddTx, saveTx: saveTx, onMemberChange: onMemberChange, showAddAgent: showAddAgent, delAgent: delAgent,
     editTx: editTx, saveEditTx: saveEditTx, delTx: delTx, copyTx: copyTx,
-    addExpenseRow: addExpenseRow, _updExp: _updExp, _updExpType: _updExpType, _delExp: _delExp,
+    addExpenseRow: addExpenseRow, _updExp: _updExp, _updExpType: _updExpType, _updExpCatalog: _updExpCatalog, _delExp: _delExp,
     calcUpDown: calcUpDown, calcWash: calcWash, _markWashManual: _markWashManual,
     _onMemberSearchFocus: _onMemberSearchFocus, _onMemberSearchInput: _onMemberSearchInput, _selectMember: _selectMember,
     _onChipTypeChange: _onChipTypeChange,
@@ -8577,7 +8775,7 @@ var WalletPage = (function() {
     html += '<div><b>流水</b><br>' + entries.length + ' 筆</div>';
     html += '</div>';
 
-    html += '<div class="wallet-toolbar"><button class="btn btn-primary" onclick="WalletPage.showAddManual()">＋ 補登</button> <button class="btn" onclick="WalletPage.showAddPendAdvance()">＋ 墊付</button> <button class="btn" onclick="WalletPage.showAddLoan()">＋ 借支</button></div>';
+    html += '<div class="wallet-toolbar"><button class="btn btn-primary" onclick="WalletPage.showAddManual()">＋ 補登</button> <button class="btn" onclick="WalletPage.showAddPendAdvance()">＋ 墊付</button> <button class="btn" onclick="WalletPage.showAddLoan()">＋ 借支</button> <button class="btn" onclick="WalletPage.showCatalogManage()">品項設定</button></div>';
     html += _loansPanelHtml(); // v2.2 未回收借支清單（常駐警示）
     html += '<p class="section-desc">只記實際掏出/收回的港幣現鈔；交收回款走結算系統不進錢包。點列可展開明細與編輯／刪除（自動流水不可直接改，請點「前往修改來源」改原單，錢包會自動更新）。借支是純現金借貸，不與帳務回碼／上下分抵銷。</p>';
 
@@ -8852,14 +9050,67 @@ var WalletPage = (function() {
     if (!el) return;
     var html = '';
     _wpPendRows.forEach(function(r, i) {
+      var presetItem = Catalog.findByName(r.name);
+      var cat = presetItem ? presetItem.id : '__custom__';
+      var isCustom = !presetItem;
       html += '<div class="form-row wp-pend-row">'
-        + '<div class="form-group"><label>品名</label><input type="text" class="form-input" value="' + escAttr(r.name) + '" placeholder="例：水舞間門票" oninput="WalletPage._wpSetRow(' + i + ',\'name\',this.value)"></div>'
+        + '<div class="form-group" style="flex:1 1 220px"><label>品名</label><select class="form-input wp-pend-cat" data-idx="' + i + '" onchange="WalletPage._wpOnItemChange(' + i + ',this)">'
+        + '<option value="__custom__"' + (isCustom ? ' selected' : '') + '>＋ 自訂品名…</option>';
+      Catalog.getAll().slice().sort(function(a, b) { return a.name.localeCompare(b.name, 'zh'); }).forEach(function(c) {
+        var sel = (cat === c.id) ? ' selected' : '';
+        var lbl = c.name + (c.defaultPriceHK ? '（' + c.defaultPriceHK + '）' : '');
+        html += '<option value="' + escAttr(c.id) + '"' + sel + '>' + esc(lbl) + '</option>';
+      });
+      html += '</select>'
+        + '<input type="text" class="form-input wp-pend-custom" data-idx="' + i + '" value="' + escAttr(r.name || '') + '" placeholder="輸入新名稱" style="margin-top:4px;display:' + (isCustom ? 'block' : 'none') + '" oninput="WalletPage._wpSetRow(' + i + ',\'name\',this.value)">'
+        + '</div>'
         + '<div class="form-group"><label>數量</label><input type="number" min="1" step="1" class="form-input" value="' + (r.qty || 1) + '" oninput="WalletPage._wpSetRow(' + i + ',\'qty\',this.value)"></div>'
         + '<div class="form-group"><label>實支HK$</label><input type="number" inputmode="decimal" min="0" step="1" class="form-input" value="' + escAttr(r.pay) + '" placeholder="例：1756" oninput="WalletPage._wpSetRow(' + i + ',\'pay\',this.value)"></div>'
         + '<div class="form-group"><label>&nbsp;</label><button class="btn-sm btn-danger" onclick="WalletPage._wpDelRow(' + i + ')">刪</button></div>'
         + '</div>';
     });
     el.innerHTML = html;
+  }
+  /** 切換 catalog/自訂：自動帶入品名與預設單價（只覆寫空值，避免抹掉用戶改過的金額） */
+  function _wpOnItemChange(i, sel) {
+    if (!_wpPendRows[i]) return;
+    var v = sel.value;
+    var customEl = document.querySelector('.wp-pend-custom[data-idx="' + i + '"]');
+    var payEl = document.querySelector('.wp-pend-row[data-idx="' + i + '"] input[type="number"]:nth-of-type(2)');
+    if (v === '__custom__') {
+      if (customEl) customEl.style.display = 'block';
+      return;
+    }
+    if (customEl) customEl.style.display = 'none';
+    var item = Catalog.getById(v);
+    if (!item) return;
+    _wpPendRows[i].name = item.name;
+    _wpPendRows[i]._payTouched = !!(_wpPendRows[i].pay && _wpPendRows[i].pay !== ''); // 用戶改過就不再覆寫
+    if (!_wpPendRows[i]._payTouched && item.defaultPriceHK > 0) {
+      _wpPendRows[i].pay = String(item.defaultPriceHK);
+      var inputs = document.querySelectorAll('.wp-pend-row[data-idx="' + i + '"] input[type="number"]');
+      if (inputs.length >= 2) inputs[1].value = item.defaultPriceHK;
+    }
+    // 同步顯示文字輸入（自訂用）的值
+    if (customEl) customEl.value = item.name;
+    _wpPendRows[i]._payTouched = false; // 重置（避免後續切換又把 pay 視為 touched）
+  }
+  // 別名以便其它地方復用（MemberPage 預支/帳務開銷會用 _catPickerRow）
+  function _catPickerRow(rowIdx, row, onSetRow) {
+    var presetItem = Catalog.findByName(row.name);
+    var cat = presetItem ? presetItem.id : '__custom__';
+    var isCustom = !presetItem;
+    var html = '<div class="form-group" style="flex:1 1 220px"><label>品名</label><select class="form-input" data-idx="' + rowIdx + '" onchange="' + onSetRow + '.catChange(' + rowIdx + ',this)">'
+      + '<option value="__custom__"' + (isCustom ? ' selected' : '') + '>＋ 自訂品名…</option>';
+    Catalog.getAll().slice().sort(function(a, b) { return a.name.localeCompare(b.name, 'zh'); }).forEach(function(c) {
+      var sel = (cat === c.id) ? ' selected' : '';
+      var lbl = c.name + (c.defaultPriceHK ? '（' + c.defaultPriceHK + '）' : '');
+      html += '<option value="' + escAttr(c.id) + '"' + sel + '>' + esc(lbl) + '</option>';
+    });
+    html += '</select>'
+      + '<input type="text" class="form-input" data-idx="' + rowIdx + '" value="' + escAttr(row.name || '') + '" placeholder="輸入新名稱" style="margin-top:4px;display:' + (isCustom ? 'block' : 'none') + '" oninput="' + onSetRow + '.setRow(' + rowIdx + ',\'name\',this.value)">'
+      + '</div>';
+    return html;
   }
   function _wpSetRow(i, k, v) {
     if (!_wpPendRows[i]) return;
@@ -8871,6 +9122,91 @@ var WalletPage = (function() {
     if (_wpPendRows.length <= 1) { _wpPendRows = [{ name: '', qty: 1, pay: '' }]; }
     else _wpPendRows.splice(i, 1);
     _renderWpPendRows();
+  }
+
+  // ====== v2.2.2 品項主檔管理 ======
+  function showCatalogManage() {
+    var items = Catalog.getAll().slice().sort(function(a, b) { return a.name.localeCompare(b.name, 'zh'); });
+    var html = '';
+    html += '<p class="section-desc">管理常用票券／品項（可固定預設單價）。墊付／預支／帳務開銷的下拉選項會讀這裡。預設已預載 10 個常用項目，單價請依貴公司實際售價補上。</p>';
+    if (items.length === 0) html += '<p style="color:#888;text-align:center;padding:20px">目前沒有品項，請新增。</p>';
+    else {
+      html += '<div style="max-height:50vh;overflow:auto">';
+      html += '<table class="data-table" style="width:100%"><thead><tr><th>名稱</th><th>分類</th><th>預設單價(HK$)</th><th></th></tr></thead><tbody>';
+      items.forEach(function(c) {
+        html += '<tr>'
+          + '<td>' + esc(c.name) + '</td>'
+          + '<td>' + esc(Catalog.categoryLabel(c.category)) + '</td>'
+          + '<td>' + (c.defaultPriceHK ? fmtHK(c.defaultPriceHK) : '<span style="color:#bbb">未設</span>') + '</td>'
+          + '<td><button class="btn-sm" onclick="WalletPage.showEditCatalogItem(\'' + escJs(c.id) + '\')">編輯</button> <button class="btn-sm btn-danger" onclick="WalletPage.delCatalogItem(\'' + escJs(c.id) + '\')">刪除</button></td>'
+          + '</tr>';
+      });
+      html += '</tbody></table>';
+      html += '</div>';
+    }
+    html += '<div class="row-actions"><button class="btn btn-primary" onclick="WalletPage.showAddCatalogItem()">＋ 新增品項</button></div>';
+    Modal.open('品項主檔', html);
+  }
+  function _catCatOptionsHtml(selected) {
+    var html = '';
+    Object.keys(Catalog.CATEGORY_LABELS).forEach(function(k) {
+      var sel = (selected === k) ? ' selected' : '';
+      html += '<option value="' + escAttr(k) + '"' + sel + '>' + esc(Catalog.CATEGORY_LABELS[k]) + '</option>';
+    });
+    return html;
+  }
+  function showAddCatalogItem() {
+    var html = '';
+    html += '<p class="section-desc">新增一個常用品項。儲存後在墊付／預支／帳務開銷下拉可立即選取。</p>';
+    html += '<div class="form-group"><label>品項名稱</label><input type="text" id="cm-name" class="form-input" placeholder="例：水舞間 VIP 席"></div>';
+    html += '<div class="form-row">';
+    html += '<div class="form-group"><label>預設單價 (HK$)</label><input type="number" inputmode="decimal" min="0" step="1" id="cm-price" class="form-input" placeholder="例：988"></div>';
+    html += '<div class="form-group"><label>分類</label><select id="cm-cat" class="form-input">' + _catCatOptionsHtml('other') + '</select></div>';
+    html += '</div>';
+    html += '<div class="row-actions"><button class="btn btn-primary" onclick="WalletPage.saveCatalogItem()">儲存</button> <button class="btn" onclick="WalletPage.showCatalogManage()">返回列表</button></div>';
+    Modal.open('新增品項', html);
+  }
+  function saveCatalogItem() {
+    var name = (document.getElementById('cm-name').value || '').trim();
+    var price = parseFloat(document.getElementById('cm-price').value);
+    var cat = document.getElementById('cm-cat').value;
+    if (!name) { Toast.error('請輸入品項名稱'); return; }
+    if (Catalog.findByName(name)) { Toast.error('已有同名品項'); return; }
+    var c = Catalog.create({ name: name, defaultPriceHK: isNaN(price) ? 0 : price, category: cat });
+    if (!c) { Toast.error('儲存失敗'); return; }
+    Toast.success('已新增「' + c.name + '」');
+    showCatalogManage();
+  }
+  function showEditCatalogItem(id) {
+    var c = Catalog.getById(id);
+    if (!c) { Toast.error('找不到此品項'); return; }
+    var html = '';
+    html += '<div class="form-group"><label>品項名稱</label><input type="text" id="cm-name" class="form-input" value="' + escAttr(c.name) + '"></div>';
+    html += '<div class="form-row">';
+    html += '<div class="form-group"><label>預設單價 (HK$)</label><input type="number" inputmode="decimal" min="0" step="1" id="cm-price" class="form-input" value="' + (c.defaultPriceHK || 0) + '"></div>';
+    html += '<div class="form-group"><label>分類</label><select id="cm-cat" class="form-input">' + _catCatOptionsHtml(c.category) + '</select></div>';
+    html += '</div>';
+    html += '<div class="row-actions"><button class="btn btn-primary" onclick="WalletPage.saveEditCatalogItem(\'' + escJs(id) + '\')">儲存</button> <button class="btn" onclick="WalletPage.showCatalogManage()">返回列表</button></div>';
+    Modal.open('編輯品項', html);
+  }
+  function saveEditCatalogItem(id) {
+    var name = (document.getElementById('cm-name').value || '').trim();
+    var price = parseFloat(document.getElementById('cm-price').value);
+    var cat = document.getElementById('cm-cat').value;
+    if (!name) { Toast.error('請輸入品項名稱'); return; }
+    var r = Catalog.update(id, { name: name, defaultPriceHK: isNaN(price) ? 0 : price, category: cat });
+    if (!r) { Toast.error('儲存失敗（可能重名）'); return; }
+    Toast.success('已更新');
+    showCatalogManage();
+  }
+  function delCatalogItem(id) {
+    var c = Catalog.getById(id);
+    if (!c) return;
+    Modal.confirm('確定刪除品項「' + c.name + '」？（已建立的預支／帳務紀錄不受影響）', function() {
+      Catalog.remove(id);
+      Toast.success('已刪除');
+      showCatalogManage();
+    });
   }
   function savePendAdvance() {
     var tripSel = document.getElementById('wp-pend-trip');
@@ -9055,6 +9391,10 @@ var WalletPage = (function() {
     showAddPendAdvance: showAddPendAdvance, savePendAdvance: savePendAdvance, // v2.2.1 墊付
     _onPendTripChange: _onPendTripChange, _renderWpPendRows: _renderWpPendRows,
     _wpSetRow: _wpSetRow, _wpAddRow: _wpAddRow, _wpDelRow: _wpDelRow,
+    // v2.2.2 品項主檔管理
+    showCatalogManage: showCatalogManage, showAddCatalogItem: showAddCatalogItem, saveCatalogItem: saveCatalogItem,
+    showEditCatalogItem: showEditCatalogItem, saveEditCatalogItem: saveEditCatalogItem, delCatalogItem: delCatalogItem,
+    _catPickerRow: _catPickerRow, _wpOnItemChange: _wpOnItemChange,
   };
 })();
 
@@ -13683,6 +14023,7 @@ function loadAllData() {
   Wallet.load(); // v2.0 港幣現鈔錢包
   PendExps.load(); // v2.1 預支開銷
   Loans.load(); // v2.2 港幣借支
+  Catalog.load(); // v2.2.2 品項主檔
   Bookings.load();
   Supplements.load();
   Settings.load();
@@ -13815,6 +14156,7 @@ function initApp() {
         WALLET_TXS: State.get('walletTxs'),
         PENDING_EXPS: State.get('pendingExps'),
         LOANS: State.get('loans'),
+        CATALOG: State.get('catalog'),
         BOOKINGS: State.get('bookings'),
         SUPPLEMENTS: State.get('supplements'),
         SETTINGS: State.get('settings'),
