@@ -6,7 +6,7 @@
  *   - 其他 → stale-while-revalidate
  */
 
-var CACHE_VERSION = 'tw-app-v2.1.2';  /// 2026-08-23 v2.1.2 修復:錢包顯示用 _run 欄位污染存檔造成每輪同步誤報衝突
+var CACHE_VERSION = 'tw-app-v2.2.0';  /// 2026-08-23 v2.2.0 借支登記:獨立追蹤(選會員+金額,存檔即扣)+部分回收+未回收清單(會員/天數/尚欠),錢包loan/loan_repay流水
 var STATIC_CACHE = CACHE_VERSION + '-static';
 var RUNTIME_CACHE = CACHE_VERSION + '-runtime';
 
