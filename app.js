@@ -68,6 +68,7 @@ var STORAGE_KEYS = {
   SHAREHOLDERS:      STORAGE_PREFIX + 'shareholders',
   TRIPS:             STORAGE_PREFIX + 'trips',
   MEMBER_TXS:        STORAGE_PREFIX + 'member_txs',
+  WALLET_TXS:        STORAGE_PREFIX + 'wallet_txs',
   BOOKINGS:          STORAGE_PREFIX + 'bookings',
   SUPPLEMENTS:       STORAGE_PREFIX + 'supplements',
   SETTINGS:          STORAGE_PREFIX + 'settings',
@@ -119,6 +120,7 @@ var FB_PATH = {
   SHAREHOLDERS:   FB_DATA_ROOT + '/shareholders',
   TRIPS:          FB_DATA_ROOT + '/trips',
   MEMBER_TXS:     FB_DATA_ROOT + '/memberTxs',
+  WALLET_TXS:     FB_DATA_ROOT + '/walletTxs', // v2.0 港幣現鈔錢包流水
   BOOKINGS:       FB_DATA_ROOT + '/bookings',
   SUPPLEMENTS:    FB_DATA_ROOT + '/supplements',
   ARCHIVES:       FB_DATA_ROOT + '/archives',
@@ -162,6 +164,7 @@ var EVENTS = {
   MTX_UPDATED:       'mtx:updated',
   MTX_DELETED:       'mtx:deleted',
   MTX_LOADED:        'mtx:loaded',
+  WALLET_TXS_LOADED: 'walletTxs', // v2.0 港幣現鈔錢包（與 State key 同名，照 memberTxs 慣例）
   BOOKING_CREATED:   'booking:created',
   BOOKING_UPDATED:   'booking:updated',
   BOOKING_DELETED:   'booking:deleted',
@@ -208,6 +211,7 @@ var STATE_EVENTS = {
   shareholders:  EVENTS.SHAREHOLDERS_LOADED,
   trips:         EVENTS.TRIPS_LOADED,
   memberTxs:     'memberTxs',
+  walletTxs:     EVENTS.WALLET_TXS_LOADED,
   bookings:      EVENTS.BOOKINGS_LOADED,
   supplements:   'supplements',
   settings:      EVENTS.SETTINGS_LOADED,
@@ -294,6 +298,7 @@ var PAGES = [
   { id: 'page-overview',    name: 'overview',    label: '總覽',       icon: '\uD83D\uDCCA', shortcut: '1' },
   { id: 'page-pending',     name: 'pending',     label: '待結帳',     icon: '\u23F3',       shortcut: '2' },
   { id: 'page-member',      name: 'member',      label: '帳務',       icon: '\uD83D\uDCB3', shortcut: '3' },
+  { id: 'page-wallet',      name: 'wallet',      label: '錢包',       icon: '\uD83D\uDCBC' }, // v2.0 港幣現鈔錢包（底部導航）
   { id: 'page-room',        name: 'room',        label: '房務管理',   icon: '\uD83C\uDFE8', shortcut: '4' },
   { id: 'page-shareholder', name: 'shareholder', label: '股東分潤',   icon: '\uD83D\uDCB0', shortcut: '5' },
   { id: 'page-members-mgmt',name: 'membersMgmt', label: '會員管理',   icon: '\u2699\uFE0F', shortcut: '6' },
@@ -543,6 +548,7 @@ var State = (function() {
     shareholders: [],
     trips: [],
     memberTxs: [],
+    walletTxs: [], // v2.0 港幣現鈔錢包流水
     bookings: [],
     supplements: [],
     settings: null,
@@ -699,6 +705,10 @@ var Schema = (function() {
     memberTxs: {
       id: 's!', tripId: 's!', memberId: 's!', createdAt: 'n',
       source: 's',
+    },
+    walletTxs: { // v2.0 港幣現鈔錢包流水
+      id: 's!', type: 's', amountHKD: 'n', date: 'd',
+      refId: 's', tripId: 's', memberId: 's', category: 's', note: 's',
     },
     bookings: {
       id: 's!', tripId: 's', memberId: 's', guestName: 's',
@@ -858,7 +868,7 @@ var Perm = (function() {
 
   // 全部可管制頁面（與 renderMap / PAGES 對齊；fees/profit/agent 不在側欄但可 Router.go）
   var PAGE_KEYS = [
-    'overview', 'pending', 'member', 'room', 'fees', 'profit',
+    'overview', 'pending', 'member', 'wallet', 'room', 'fees', 'profit',
     'agent', 'shareholder', 'membersMgmt', 'history', 'reports', 'settings', 'auditLog',
   ];
 
@@ -893,7 +903,7 @@ var Perm = (function() {
     accountant: {
       label: '會計',
       pages: {
-        overview: 'read', pending: 'write', member: 'write', room: 'read',
+        overview: 'read', pending: 'write', member: 'write', wallet: 'write', room: 'read',
         fees: 'write', profit: 'write', agent: 'read', shareholder: 'write',
         membersMgmt: 'write', history: 'write', settings: 'read',
       },
@@ -920,6 +930,7 @@ var Perm = (function() {
   var COLLECTION_PAGES = {
     members:       ['member', 'membersMgmt'],
     memberTxs:     ['member', 'membersMgmt'],
+    walletTxs:     ['wallet'], // v2.0 港幣現鈔錢包
     trips:         ['member', 'pending'],
     supplements:   ['fees', 'member'],
     bookings:      ['room', 'pending'],
@@ -2888,6 +2899,7 @@ function _setupWatchers() {
     { key: 'SHAREHOLDERS',  storeKey: STORAGE_KEYS.SHAREHOLDERS,  event: EVENTS.SHAREHOLDERS_LOADED,  stateKey: 'shareholders' },
     { key: 'TRIPS',         storeKey: STORAGE_KEYS.TRIPS,         event: EVENTS.TRIPS_LOADED,         stateKey: 'trips' },
     { key: 'MEMBER_TXS',    storeKey: STORAGE_KEYS.MEMBER_TXS,    event: EVENTS.MTX_LOADED,           stateKey: 'memberTxs' },
+    { key: 'WALLET_TXS',    storeKey: STORAGE_KEYS.WALLET_TXS,    event: EVENTS.WALLET_TXS_LOADED,    stateKey: 'walletTxs' },
     { key: 'BOOKINGS',      storeKey: STORAGE_KEYS.BOOKINGS,      event: EVENTS.BOOKINGS_LOADED,      stateKey: 'bookings' },
     { key: 'SUPPLEMENTS',   storeKey: STORAGE_KEYS.SUPPLEMENTS,   event: EVENTS.SYNC_COMPLETE,        stateKey: 'supplements' },
     { key: 'SETTINGS',      storeKey: STORAGE_KEYS.SETTINGS,      event: EVENTS.SETTINGS_LOADED,      stateKey: 'settings' },
@@ -2992,7 +3004,7 @@ function _setupWatchers() {
 function _resyncAll() {
   var syncPaths = [
     FB_PATH.MEMBERS, FB_PATH.AGENTS, FB_PATH.SHAREHOLDERS,
-    FB_PATH.TRIPS, FB_PATH.MEMBER_TXS, FB_PATH.BOOKINGS,
+    FB_PATH.TRIPS, FB_PATH.MEMBER_TXS, FB_PATH.WALLET_TXS, FB_PATH.BOOKINGS,
     FB_PATH.SUPPLEMENTS, FB_PATH.SETTINGS, FB_PATH.EXTRA_INCOME,
     FB_PATH.HOTEL_CONFIG, FB_PATH.USERS,
     FB_PATH.AUDIT_LOG,
@@ -3003,6 +3015,7 @@ function _resyncAll() {
   storeMap[FB_PATH.SHAREHOLDERS]  = { storeKey: STORAGE_KEYS.SHAREHOLDERS,  event: EVENTS.SHAREHOLDERS_LOADED,  stateKey: 'shareholders' };
   storeMap[FB_PATH.TRIPS]         = { storeKey: STORAGE_KEYS.TRIPS,         event: EVENTS.TRIPS_LOADED,         stateKey: 'trips' };
   storeMap[FB_PATH.MEMBER_TXS]    = { storeKey: STORAGE_KEYS.MEMBER_TXS,    event: EVENTS.MTX_LOADED,           stateKey: 'memberTxs' };
+  storeMap[FB_PATH.WALLET_TXS]    = { storeKey: STORAGE_KEYS.WALLET_TXS,    event: EVENTS.WALLET_TXS_LOADED,    stateKey: 'walletTxs' }; // v2.0 錢包
   storeMap[FB_PATH.BOOKINGS]      = { storeKey: STORAGE_KEYS.BOOKINGS,      event: EVENTS.BOOKINGS_LOADED,      stateKey: 'bookings' };
   storeMap[FB_PATH.SUPPLEMENTS]   = { storeKey: STORAGE_KEYS.SUPPLEMENTS,   event: EVENTS.SYNC_COMPLETE,        stateKey: 'supplements' };
   storeMap[FB_PATH.SETTINGS]      = { storeKey: STORAGE_KEYS.SETTINGS,      event: EVENTS.SETTINGS_LOADED,      stateKey: 'settings' };
@@ -3470,6 +3483,234 @@ var MemberTxs = (function() {
     EventBus.emit(EVENTS.MTX_DELETED, id);
   }
   return { load: load, save: save, getAll: getAll, getById: getById, getByTrip: getByTrip, getByMember: getByMember, create: create, update: update, remove: remove };
+})();
+
+
+// === src/data/wallet.js ===
+/**
+ * data/wallet.js — v2.0 港幣現鈔錢包（現金制流水）
+ *
+ * 定位：即時掌握公司手上還有多少港幣現鈔。只記「實際掏出/收回的錢」，
+ * 交收回款不進錢包（走應收制結算系統），NT 結算計算完全不受影響。
+ *
+ * 流水來源：
+ *  - open      啟用錢包時自填目前現鈔數（不回溯歷史）
+ *  - member_tx 現金碼帳務：淨額 =（回碼−出碼）×10000
+ *  - credit_tx 信用碼帳務：出碼不動錢包；僅淨贏（回碼>出碼）部分進帳
+ *  - expense   開銷：扣公司實支 Σpayout（預設=金額，門票預設=ourPrice×數量；招待照扣）
+ *  - manual    手動補登（換匯/墊付/老闆存提/對帳調整/其他）
+ *
+ * 同步：訂閱 MTX_CREATED/UPDATED/DELETED/LOADED（initApp 接線），冪等 upsert，
+ *       編輯帳務 = diff 覆蓋、刪除 = 移除流水；自動流水不可手動修改。
+ *
+ * 依赖: core/constants.js, core/schema.js, core/events.js, core/state.js, core/store.js, sync/uploader.js
+ */
+var Wallet = (function() {
+  function load() {
+    var arr = Store.readArray(STORAGE_KEYS.WALLET_TXS);
+    State.set('walletTxs', arr);
+    return arr;
+  }
+  function save(arr) {
+    Store.writeArray(STORAGE_KEYS.WALLET_TXS, arr);
+    State.set('walletTxs', arr);
+  }
+  function getAll() {
+    return (State.get('walletTxs') || []).filter(function(w) { return !w._deleted; });
+  }
+  function getById(id) {
+    return getAll().find(function(w) { return w.id === id; });
+  }
+  function balance() {
+    return getAll().reduce(function(s, w) { return s + (w.amountHKD || 0); }, 0);
+  }
+
+  // 籌碼淨額（HKD，正=現鈔流入公司）
+  // 現金碼：回碼−出碼（出20回18 → −2萬，公司掏現鈔）
+  // 信用碼：出碼跳過；僅淨贏（回碼>出碼）時超贏港幣存入公司錢包
+  function chipNetHKD(tx) {
+    var out = (tx.outCode || 0) * 10000;
+    var back = (tx.backCode || 0) * 10000;
+    if (tx.chipType === 'credit') return back > out ? back - out : 0;
+    return back - out;
+  }
+
+  // 開銷公司實支（HKD）
+  // payout 未手填時的預設：門票類有 ourPrice → ourPrice×數量；其餘 → 金額（公司一定支出）
+  function _expPayout(e) {
+    if (e.payout !== undefined && e.payout !== null) return e.payout || 0;
+    if (e.ourPrice !== undefined && e.ourPrice !== null && e.ticketType && e.ticketType !== 'other' && e.ticketType !== 'loan') {
+      return (e.ourPrice || 0) * (e.quantity || 1);
+    }
+    return e.amountHK || 0;
+  }
+  function expensePayoutHKD(tx) {
+    var list = tx.expenses || [];
+    var total = list.reduce(function(s, e) { return s + _expPayout(e); }, 0);
+    return Math.round(total);
+  }
+
+  // —— 冪等寫入：內容相同則不動（避免同步迴圈）——
+  function _same(a, b) {
+    if (!a || !b) return false;
+    var keys = ['type', 'amountHKD', 'date', 'refId', 'tripId', 'memberId', 'category', 'note'];
+    for (var i = 0; i < keys.length; i++) {
+      if ((a[keys[i]] || '') !== (b[keys[i]] || '')) return false;
+    }
+    return JSON.stringify(a.detail || null) === JSON.stringify(b.detail || null);
+  }
+  function _upsert(entry) {
+    var arr = State.get('walletTxs') || [];
+    var idx = arr.findIndex(function(w) { return w.id === entry.id; });
+    var now = Date.now();
+    if (idx >= 0) {
+      if (!arr[idx]._deleted && _same(arr[idx], entry)) return; // 完全相同 → 不動
+      entry.createdAt = arr[idx].createdAt || now;
+    } else {
+      entry.createdAt = now;
+    }
+    entry._fbKey = entry.id;
+    entry._updatedAt = now;
+    if (!Schema.sanitize('walletTxs', entry)) return;
+    if (idx >= 0) arr[idx] = entry; else arr.push(entry);
+    save(arr);
+    var obj = {}; obj[entry._fbKey] = entry;
+    enqueue(FB_PATH.WALLET_TXS, obj);
+  }
+  function _removeById(id) {
+    var arr = State.get('walletTxs') || [];
+    var idx = arr.findIndex(function(w) { return w.id === id; });
+    if (idx < 0 || arr[idx]._deleted) return;
+    arr[idx]._deleted = true;
+    arr[idx]._updatedAt = Date.now();
+    save(arr);
+    var obj = {}; obj[arr[idx]._fbKey] = arr[idx];
+    enqueue(FB_PATH.WALLET_TXS, obj);
+  }
+
+  /**
+   * 帳務 → 錢包同步（create/update 後呼叫；刪除呼叫 removeForTx）
+   * 一筆帳務最多產生兩筆流水：籌碼淨額一筆（wtx_<txId>）＋開銷實支一筆（wtx_<txId>_exp）
+   * 淨額為 0 → 不產生流水（既有流水移除）
+   */
+  function syncForTx(tx) {
+    if (!tx) return;
+    if (tx._deleted) { removeForTx(tx.id); return; }
+    var m = (typeof Members !== 'undefined') ? Members.getById(tx.memberId) : null;
+
+    var chip = Math.round(chipNetHKD(tx));
+    var chipId = 'wtx_' + tx.id;
+    if (chip !== 0) {
+      _upsert({
+        id: chipId,
+        type: tx.chipType === 'credit' ? 'credit_tx' : 'member_tx',
+        refId: tx.id, tripId: tx.tripId, memberId: tx.memberId,
+        amountHKD: chip, date: tx.date,
+        note: m ? (m.id + ' ' + (m.name || '')) : (tx.memberId || ''),
+        detail: { outCode: tx.outCode || 0, backCode: tx.backCode || 0, chipType: tx.chipType || 'cash' },
+      });
+    } else {
+      _removeById(chipId);
+    }
+
+    var pay = expensePayoutHKD(tx);
+    var expId = chipId + '_exp';
+    if (pay > 0) {
+      _upsert({
+        id: expId,
+        type: 'expense',
+        refId: tx.id, tripId: tx.tripId, memberId: tx.memberId,
+        amountHKD: -pay, date: tx.date,
+        note: m ? (m.id + ' ' + (m.name || '')) : (tx.memberId || ''),
+        detail: { items: (tx.expenses || []).map(function(e) {
+          return { name: e.name || '', amountHK: e.amountHK || 0, payout: _expPayout(e), absorbed: !!e.absorbed };
+        }) },
+      });
+    } else {
+      _removeById(expId);
+    }
+  }
+
+  function removeForTx(txId) {
+    if (!txId) return;
+    _removeById('wtx_' + txId);
+    _removeById('wtx_' + txId + '_exp');
+  }
+
+  /** 全量對帳：MTX_LOADED（遠端合併/回收站還原/Bot 寫入）後重算所有帳務流水（冪等） */
+  function reconcileAll() {
+    var txs = (typeof MemberTxs !== 'undefined') ? MemberTxs.getAll() : [];
+    var alive = {};
+    txs.forEach(function(tx) {
+      if (!tx || tx._deleted) return;
+      alive[tx.id] = true;
+      syncForTx(tx);
+    });
+    // 清孤兒流水（帳務已不存在但流水還活著）
+    (State.get('walletTxs') || []).forEach(function(w) {
+      if (w._deleted) return;
+      if (w.refId && !alive[w.refId]) _removeById(w.id);
+    });
+  }
+
+  // —— 手動操作 ——
+  function isOpened() {
+    return getAll().length > 0;
+  }
+  function openAccount(amountHKD, date, note) {
+    if (isOpened()) return null;
+    var entry = {
+      id: 'wtx_open_' + Date.now(),
+      type: 'open', amountHKD: Math.round(amountHKD) || 0,
+      date: date || TWDate.todayStr(),
+      note: note || '錢包開帳（目前現鈔數）',
+    };
+    _upsert(entry);
+    return entry;
+  }
+  function addManual(data) {
+    var entry = {
+      id: 'wtx_m_' + Date.now(),
+      type: 'manual',
+      category: data.category || 'other',
+      amountHKD: Math.round(data.amountHKD) || 0,
+      date: data.date || TWDate.todayStr(),
+      note: data.note || '',
+    };
+    _upsert(entry);
+    return entry;
+  }
+  function updateManual(id, data) {
+    var arr = State.get('walletTxs') || [];
+    var idx = arr.findIndex(function(w) { return w.id === id; });
+    if (idx < 0 || arr[idx].type !== 'manual') return null;
+    Object.assign(arr[idx], {
+      category: data.category || arr[idx].category || 'other',
+      amountHKD: Math.round(data.amountHKD) || 0,
+      date: data.date || arr[idx].date,
+      note: data.note !== undefined ? data.note : (arr[idx].note || ''),
+      _updatedAt: Date.now(),
+    });
+    Schema.sanitize('walletTxs', arr[idx]);
+    save(arr);
+    var obj = {}; obj[arr[idx]._fbKey] = arr[idx];
+    enqueue(FB_PATH.WALLET_TXS, obj);
+    return arr[idx];
+  }
+  function removeManual(id) {
+    var w = getById(id);
+    if (!w || w.type !== 'manual') return false; // 自動流水不可手動刪
+    _removeById(id);
+    return true;
+  }
+
+  return {
+    load: load, save: save, getAll: getAll, getById: getById, balance: balance,
+    chipNetHKD: chipNetHKD, expensePayoutHKD: expensePayoutHKD,
+    syncForTx: syncForTx, removeForTx: removeForTx, reconcileAll: reconcileAll,
+    isOpened: isOpened, openAccount: openAccount,
+    addManual: addManual, updateManual: updateManual, removeManual: removeManual,
+  };
 })();
 
 
@@ -4978,7 +5219,7 @@ var PdfExport = (function() {
 
     html += '<div class="tx-card-section">';
     html += '<div class="tx-card-row"><span class="tx-card-label">日期</span><span class="tx-card-val">' + _escapeHtml(tx.date || '') + '</span></div>';
-    html += '<div class="tx-card-row"><span class="tx-card-label">出碼</span><span class="tx-card-val">' + fmtCardNum(tx.outCode || 0) + ' HK萬</span></div>';
+    html += '<div class="tx-card-row"><span class="tx-card-label">出碼' + (tx.chipType === 'credit' ? ' <span class="chip-credit-tag">信用</span>' : '') + '</span><span class="tx-card-val">' + fmtCardNum(tx.outCode || 0) + ' HK萬</span></div>';
     html += '<div class="tx-card-row"><span class="tx-card-label">回碼</span><span class="tx-card-val">' + fmtCardNum(tx.backCode || 0) + ' HK萬</span></div>';
     html += '<div class="tx-card-row"><span class="tx-card-label">上下分</span><span class="tx-card-val ' + (isNeg ? 'negative' : 'positive') + '">' + fmtCardNum(tx.upDown || 0) + ' HK萬</span></div>';
     html += '</div>';
@@ -4999,7 +5240,7 @@ var PdfExport = (function() {
       html += '<div class="tx-card-row"><span class="tx-card-label">— 無開銷 —</span></div>';
     } else {
       html += '<table class="exp-table"><thead><tr>';
-      html += '<th>項目</th><th class="num">金額(HK)</th><th class="num">匯率</th><th class="num">NT</th>';
+      html += '<th>項目</th><th class="num">金額(HK)</th><th class="num" title="公司實支——錢包扣款依據">實支(HK)</th><th class="num">匯率</th><th class="num">NT</th>';
       html += '</tr></thead><tbody>';
       expenses.forEach(function(e) {
         var qtyLabel = (e.quantity && e.quantity > 1) ? ' ×' + e.quantity : '';
@@ -5007,11 +5248,16 @@ var PdfExport = (function() {
         var cls = isAbsorb ? ' class="exp-row exp-row-host"' : ' class="exp-row"';
         html += '<tr' + cls + '>';
         html += '<td>' + _escapeHtml((e.name || '') + qtyLabel) + (isAbsorb ? ' <span class="tx-absorb-tag" title="由代理自行負擔，不從會員交收扣除">代理吸收</span>' : '') + '</td>';
+        // v2.0 實支顯示值：手填 > 門票成本價×數量 > 金額
+        var payOf = (e.payout !== undefined && e.payout !== null) ? (e.payout || 0)
+          : ((e.ourPrice !== undefined && e.ourPrice !== null && e.ticketType && e.ticketType !== 'other' && e.ticketType !== 'loan')
+              ? (e.ourPrice || 0) * (e.quantity || 1) : (e.amountHK || 0));
         if (isAbsorb) {
-          html += '<td class="num exp-host-cell" colspan="3" title="由代理招待，不從交收扣除"><span class="exp-host-badge">招待</span> 不從交收扣除</td>';
+          html += '<td class="num exp-host-cell" colspan="4" title="由代理招待，不從交收扣除"><span class="exp-host-badge">招待</span> 不從交收扣除</td>';
         } else {
           var nt = (e.amountHK || 0) * (e.exchangeRate || 0);
           html += '<td class="num">' + fmtCardNum(e.amountHK || 0) + '</td>';
+          html += '<td class="num">' + fmtCardNum(payOf) + '</td>';
           html += '<td class="num">' + (e.exchangeRate || 0) + '</td>';
           html += '<td class="num">' + fmtNum(Math.round(nt)) + '</td>';
         }
@@ -5020,7 +5266,7 @@ var PdfExport = (function() {
       // v1.9.5 代理吸收合計（單獨列示，不計入總交收）
       var absTotal = calcAbsorbedNT(expenses);
       if (absTotal > 0) {
-        html += '<tr class="exp-absorb-total"><td>代理吸收合計（不從交收扣除）</td><td></td><td></td><td class="num">' + fmtNum(absTotal) + '</td></tr>';
+        html += '<tr class="exp-absorb-total"><td>代理吸收合計（不從交收扣除）</td><td></td><td></td><td></td><td class="num">' + fmtNum(absTotal) + '</td></tr>';
       }
       html += '</tbody></table>';
     }
@@ -6088,7 +6334,7 @@ var PendingPage = (function() {
 
       // 第一區：出碼、回碼、上下分
       html += '<div class="mb-card-section">';
-      html += '<div class="mb-card-row"><span class="mb-card-label">出碼</span><span class="mb-card-val">' + fmtCardNum(tx.outCode || 0) + ' HK萬</span></div>';
+      html += '<div class="mb-card-row"><span class="mb-card-label">出碼' + (tx.chipType === 'credit' ? ' <span class="chip-credit-tag">信用</span>' : '') + '</span><span class="mb-card-val">' + fmtCardNum(tx.outCode || 0) + ' HK萬</span></div>';
       html += '<div class="mb-card-row"><span class="mb-card-label">回碼</span><span class="mb-card-val">' + fmtCardNum(tx.backCode || 0) + ' HK萬</span></div>';
       html += '<div class="mb-card-row"><span class="mb-card-label">上下分</span><span class="mb-card-val ' + (isNeg ? 'num-negative' : 'num-positive') + '">' + fmtCardNum(tx.upDown || 0) + ' HK萬</span></div>';
       html += '</div>';
@@ -6465,7 +6711,7 @@ var MemberPage = (function() {
           // 第一區：日期、出碼、回碼、上下分
           html += '<div class="mb-card-section">';
           html += '<div class="mb-card-row"><span class="mb-card-label">日期</span><span class="mb-card-val">' + (tx.date || '') + '</span></div>';
-          html += '<div class="mb-card-row"><span class="mb-card-label">出碼</span><span class="mb-card-val">' + fmtCardNum(tx.outCode || 0) + ' HK萬</span></div>';
+          html += '<div class="mb-card-row"><span class="mb-card-label">出碼' + (tx.chipType === 'credit' ? ' <span class="chip-credit-tag">信用</span>' : '') + '</span><span class="mb-card-val">' + fmtCardNum(tx.outCode || 0) + ' HK萬</span></div>';
           html += '<div class="mb-card-row"><span class="mb-card-label">回碼</span><span class="mb-card-val">' + fmtCardNum(tx.backCode || 0) + ' HK萬</span></div>';
           html += '<div class="mb-card-row"><span class="mb-card-label">上下分</span><span class="mb-card-val ' + (isNeg ? 'num-negative' : 'num-positive') + '">' + fmtCardNum(tx.upDown || 0) + ' HK萬</span></div>';
           html += '</div>';
@@ -6884,6 +7130,13 @@ var MemberPage = (function() {
     html += '</select></div>';
     // v1.9.4 帳務日期可指定（預設今天）— 隔天補帳不用存檔後再編輯改日期
     html += '<div class="form-group"><label>日期</label><input type="date" id="tx-date" class="form-input" value="' + (prefillTx && prefillTx.date ? prefillTx.date : TWDate.todayStr()) + '"></div>';
+    // v2.0 籌碼類型：現金碼（動用公司現鈔）/ 信用碼（賭場信用額度，不動現鈔，僅淨贏入錢包）
+    html += '<div class="form-group"><label>籌碼類型</label>';
+    html += '<select id="tx-chiptype" class="form-input" onchange="MemberPage._onChipTypeChange(this.value)">';
+    html += '<option value="cash"' + (prefillTx && prefillTx.chipType === 'credit' ? '' : ' selected') + '>現金碼（公司現鈔出入，影響錢包）</option>';
+    html += '<option value="credit"' + (prefillTx && prefillTx.chipType === 'credit' ? ' selected' : '') + '>信用碼（賭場額度，不動現鈔）</option>';
+    html += '</select></div>';
+    html += '<div id="tx-chiptype-hint" style="font-size:12px;color:var(--text-muted);margin:-4px 0 8px;">現金碼：出碼掏現鈔、回碼收現鈔，淨額進錢包</div>';
     html += '<div class="form-row">';
     html += '<div class="form-group"><label>出碼(CR)(萬)</label><input type="number" inputmode="decimal" step="0.001" id="tx-out" class="form-input" value="' + (prefillTx ? fmtNum(prefillTx.outCode || 0) : '') + '" oninput="MemberPage.calcUpDown()"></div>';
     html += '<div class="form-group"><label>回碼(寄碼)(萬)</label><input type="number" inputmode="decimal" step="0.001" id="tx-back" class="form-input" value="' + (prefillTx ? fmtNum(prefillTx.backCode || 0) : '') + '" oninput="MemberPage.calcUpDown()"></div>';
@@ -7023,6 +7276,15 @@ var MemberPage = (function() {
     return (tx.subtotal || 0) * 10000 - (tx.expensesNT || 0);
   }
 
+  // v2.0 籌碼類型切換提示：讓會計當下知道對錢包的影響
+  function _onChipTypeChange(val) {
+    var hint = document.getElementById('tx-chiptype-hint');
+    if (!hint) return;
+    hint.textContent = val === 'credit'
+      ? '信用碼：出碼不動現鈔，僅淨贏（回碼＞出碼）超贏港幣存入錢包'
+      : '現金碼：出碼掏現鈔、回碼收現鈔，淨額進錢包';
+  }
+
   function calcUpDown() {
     var out = parseFloat(document.getElementById('tx-out').value) || 0;
     var back = parseFloat(document.getElementById('tx-back').value) || 0;
@@ -7067,7 +7329,7 @@ var MemberPage = (function() {
     } catch (e) { return 4.2; }
   }
   function addExpenseRow() {
-    _expenseRows.push({ name: '', ticketType: 'other', quantity: 1, unitPrice: 0, amountHK: 0, exchangeRate: _defaultExchangeRate() });
+    _expenseRows.push({ name: '', ticketType: 'other', quantity: 1, unitPrice: 0, amountHK: 0, exchangeRate: _defaultExchangeRate(), payout: 0, payoutManual: false });
     renderExpenseRows();
   }
   function renderExpenseRows() {
@@ -7100,17 +7362,32 @@ var MemberPage = (function() {
       }
       html += '<input type="number" step="1" min="1" placeholder="數量" class="form-input" style="width:60px;flex:0 0 60px;" value="' + (row.quantity || 1) + '" oninput="MemberPage._updExp(' + i + ',\'quantity\',this.value)">';
       html += '<input type="number" placeholder="金額" class="form-input exp-amt" style="width:80px;flex:0 0 80px;" value="' + (row.amountHK || 0) + '" onchange="MemberPage._updExp(' + i + ',\'amountHK\',this.value)">';
+      // v2.0 公司實支（HKD）：錢包扣款依據。預設跟隨金額（門票預設=成本價×數量），可手動覆蓋
+      html += '<input type="number" step="1" placeholder="實支" title="公司實支(HK)——錢包扣款金額；門票預設=成本價×數量" class="form-input exp-pay" style="width:70px;flex:0 0 70px;" value="' + _expPayoutFor(row) + '" onchange="MemberPage._updExp(' + i + ',\'payout\',this.value)">';
       html += '<input type="number" step="0.01" placeholder="匯率" class="form-input" style="width:60px;flex:0 0 60px;" value="' + (row.exchangeRate || _defaultExchangeRate()) + '" onchange="MemberPage._updExp(' + i + ',\'exchangeRate\',this.value)">';
       // v1.9.5 代理吸收：此筆開銷由代理自行負擔，不從會員交收扣除（例：代購蛋塔由上級代理招待）
       html += '<label class="exp-absorb" title="由代理自行吸收，不從會員交收扣除"><input type="checkbox"' + (row.absorbed ? ' checked' : '') + ' onchange="MemberPage._updExp(' + i + ',\'absorbed\',this.checked)"><span>吸收</span></label>';
       html += '<button class="btn-sm btn-danger" onclick="MemberPage._delExp(' + i + ')" style="flex:0 0 32px;padding:4px;">×</button>';
       html += '</div>';
-      // 非其他時顯示單價提示（房費不顯示）
+      // 非其他時顯示單價提示（房費不顯示）— v2.0 加實支提示
       if (row.ticketType && row.ticketType !== 'other' && row.ticketType !== 'roomfee' && row.unitPrice) {
-        html += '<div class="exp-hint-' + i + '" style="font-size:var(--font-size-sm);color:var(--text-secondary);padding-left:4px;margin-bottom:4px;">單價 ' + row.unitPrice + ' HK × ' + (row.quantity || 1) + ' = ' + ((row.unitPrice || 0) * (row.quantity || 1)) + ' HK</div>';
+        html += '<div class="exp-hint-' + i + '" style="font-size:var(--font-size-sm);color:var(--text-secondary);padding-left:4px;margin-bottom:4px;">單價 ' + row.unitPrice + ' HK × ' + (row.quantity || 1) + ' = ' + ((row.unitPrice || 0) * (row.quantity || 1)) + ' HK'
+          + (row.ourPrice != null ? '｜實支 ' + (row.ourPrice || 0) + ' × ' + (row.quantity || 1) + ' = ' + ((row.ourPrice || 0) * (row.quantity || 1)) + ' HK' : '')
+          + '</div>';
       }
     });
     container.innerHTML = html;
+  }
+  // v2.0 開銷實支顯示值：手填 > 門票成本價×數量 > 金額（公司一定支出）
+  function _expPayoutFor(row) {
+    if (row.payout !== undefined && row.payout !== null) return row.payout || 0;
+    return _expPayoutDefault(row);
+  }
+  function _expPayoutDefault(row) {
+    if (row.ourPrice !== undefined && row.ourPrice !== null && row.ticketType && row.ticketType !== 'other' && row.ticketType !== 'loan') {
+      return Math.round((row.ourPrice || 0) * (row.quantity || 1) * 100) / 100;
+    }
+    return row.amountHK || 0;
   }
   function _updExpType(i, val) {
     if (!_expenseRows[i]) return;
@@ -7120,49 +7397,73 @@ var MemberPage = (function() {
     if (val === 'other') {
       _expenseRows[i].name = '';
       _expenseRows[i].unitPrice = 0;
+      _expenseRows[i].ourPrice = null;
+      if (!_expenseRows[i].payoutManual) _expenseRows[i].payout = _expenseRows[i].amountHK || 0;
     } else if (val === 'loan') {
       // v1.8.0 借款(港幣)：金額手填，單價不適用
       _expenseRows[i].name = '借款(港幣)';
       _expenseRows[i].unitPrice = 0;
+      _expenseRows[i].ourPrice = null;
+      if (!_expenseRows[i].payoutManual) _expenseRows[i].payout = _expenseRows[i].amountHK || 0;
     } else if (val === 'wp') {
       var wp = tp.waterPark || { guestPrice: 450, ourPrice: 406 };
       _expenseRows[i].name = '水上樂園手帶';
       _expenseRows[i].unitPrice = wp.guestPrice;
+      _expenseRows[i].ourPrice = wp.ourPrice;
       _expenseRows[i].amountHK = wp.guestPrice * qty;
+      if (!_expenseRows[i].payoutManual) _expenseRows[i].payout = wp.ourPrice * qty;
     } else if (val.indexOf('wd-') === 0) {
       var idx = parseInt(val.substring(3));
       var t = (tp.waterDance || [])[idx];
       if (t) {
         _expenseRows[i].name = '水舞間 ' + t.name;
         _expenseRows[i].unitPrice = t.guestPrice;
+        _expenseRows[i].ourPrice = t.ourPrice;
         _expenseRows[i].amountHK = t.guestPrice * qty;
+        if (!_expenseRows[i].payoutManual) _expenseRows[i].payout = t.ourPrice * qty;
       }
     }
     renderExpenseRows();
   }
   function _updExp(i, field, val) {
     if (!_expenseRows[i]) return;
+    var row = _expenseRows[i];
     if (field === 'absorbed') {
       // v1.9.5 代理吸收（boolean）
-      _expenseRows[i].absorbed = !!val;
+      row.absorbed = !!val;
       var rowEl = document.querySelector('.expense-row[data-idx="' + i + '"]');
       if (rowEl) rowEl.style.opacity = val ? '0.65' : '';
+    } else if (field === 'payout') {
+      // v2.0 公司實支：手動覆蓋後不再自動跟隨（錢包扣款依據）
+      row.payout = parseFloat(val) || 0;
+      row.payoutManual = true;
     } else if (field === 'name') {
-      _expenseRows[i][field] = val;
+      row[field] = val;
     } else if (field === 'quantity') {
       // 允許空字串暫存，不強制 || 1，避免 BACKSPACE 刪不掉
       var qty = val === '' ? 0 : (parseInt(val) || 0);
-      _expenseRows[i].quantity = qty;
-      if (_expenseRows[i].ticketType && _expenseRows[i].ticketType !== 'other' && _expenseRows[i].ticketType !== 'roomfee' && _expenseRows[i].unitPrice) {
-        _expenseRows[i].amountHK = _expenseRows[i].unitPrice * (qty || 1);
+      row.quantity = qty;
+      if (row.ticketType && row.ticketType !== 'other' && row.ticketType !== 'roomfee' && row.unitPrice) {
+        row.amountHK = row.unitPrice * (qty || 1);
+        if (!row.payoutManual) row.payout = _expPayoutDefault(row);
         // 只更新金額欄和提示行，不重渲染整行（避免搶焦點）
         var amtInput = document.querySelector('.expense-row[data-idx="' + i + '"] .exp-amt');
-        if (amtInput) amtInput.value = _expenseRows[i].amountHK;
+        if (amtInput) amtInput.value = row.amountHK;
+        var payInput = document.querySelector('.expense-row[data-idx="' + i + '"] .exp-pay');
+        if (payInput) payInput.value = row.payout;
         var hint = document.querySelector('.exp-hint-' + i);
-        if (hint) hint.textContent = '單價 ' + _expenseRows[i].unitPrice + ' HK × ' + (qty || 1) + ' = ' + _expenseRows[i].amountHK + ' HK';
+        if (hint) hint.textContent = '單價 ' + row.unitPrice + ' HK × ' + (qty || 1) + ' = ' + row.amountHK + ' HK';
+      }
+    } else if (field === 'amountHK') {
+      row.amountHK = parseFloat(val) || 0;
+      // v2.0 金額手改 → 實支跟隨（未手動覆蓋實支時）
+      if (!row.payoutManual) {
+        row.payout = row.amountHK;
+        var payInput2 = document.querySelector('.expense-row[data-idx="' + i + '"] .exp-pay');
+        if (payInput2) payInput2.value = row.payout;
       }
     } else {
-      _expenseRows[i][field] = parseFloat(val) || 0;
+      row[field] = parseFloat(val) || 0;
     }
   }
   function _delExp(i) {
@@ -7191,6 +7492,7 @@ var MemberPage = (function() {
       vipHallId: document.getElementById('tx-hall').value,
       date: (document.getElementById('tx-date') && document.getElementById('tx-date').value) || TWDate.todayStr(),
       source: 'manual', // v1.9.4 帳務來源標示（manual=手輸 / bot=BOT自動結帳），供核帳與多端同步辨識
+      chipType: (document.getElementById('tx-chiptype') && document.getElementById('tx-chiptype').value) || 'cash', // v2.0 現金碼/信用碼
       outCode: parseFloat(document.getElementById('tx-out').value) || 0,
       backCode: parseFloat(document.getElementById('tx-back').value) || 0,
       washCode: parseFloat(document.getElementById('tx-wash').value) || 0,
@@ -7232,6 +7534,13 @@ var MemberPage = (function() {
     html += '</select></div>';
     html += '<div class="form-group"><label>日期</label>';
     html += '<input type="date" id="tx-date" class="form-input" value="' + (tx.date || '') + '"></div>';
+    // v2.0 籌碼類型（編輯時可改）
+    html += '<div class="form-group"><label>籌碼類型</label>';
+    html += '<select id="tx-chiptype" class="form-input" onchange="MemberPage._onChipTypeChange(this.value)">';
+    html += '<option value="cash"' + (tx.chipType === 'credit' ? '' : ' selected') + '>現金碼（公司現鈔出入，影響錢包）</option>';
+    html += '<option value="credit"' + (tx.chipType === 'credit' ? ' selected' : '') + '>信用碼（賭場額度，不動現鈔）</option>';
+    html += '</select></div>';
+    html += '<div id="tx-chiptype-hint" style="font-size:12px;color:var(--text-muted);margin:-4px 0 8px;">' + (tx.chipType === 'credit' ? '信用碼：出碼不動現鈔，僅淨贏（回碼＞出碼）超贏港幣存入錢包' : '現金碼：出碼掏現鈔、回碼收現鈔，淨額進錢包') + '</div>';
     html += '<div class="form-row">';
     html += '<div class="form-group"><label>出碼(CR)(萬)</label><input type="number" inputmode="decimal" step="0.001" id="tx-out" class="form-input" value="' + fmtNum(tx.outCode || 0) + '" oninput="MemberPage.calcUpDown()"></div>';
     html += '<div class="form-group"><label>回碼(寄碼)(萬)</label><input type="number" inputmode="decimal" step="0.001" id="tx-back" class="form-input" value="' + fmtNum(tx.backCode || 0) + '" oninput="MemberPage.calcUpDown()"></div>';
@@ -7264,6 +7573,7 @@ var MemberPage = (function() {
     var patch = {
       vipHallId: document.getElementById('tx-hall').value,
       date: document.getElementById('tx-date').value,
+      chipType: (document.getElementById('tx-chiptype') && document.getElementById('tx-chiptype').value) || 'cash', // v2.0 現金碼/信用碼
       outCode: parseFloat(document.getElementById('tx-out').value) || 0,
       backCode: parseFloat(document.getElementById('tx-back').value) || 0,
       washCode: parseFloat(document.getElementById('tx-wash').value) || 0,
@@ -7300,6 +7610,7 @@ var MemberPage = (function() {
     showAddTx({
       memberId: tx.memberId,
       vipHallId: tx.vipHallId,
+      chipType: tx.chipType, // v2.0 帶上籌碼類型
       outCode: tx.outCode,
       backCode: tx.backCode,
       customerUp: tx.customerUp,
@@ -7351,7 +7662,262 @@ var MemberPage = (function() {
     addExpenseRow: addExpenseRow, _updExp: _updExp, _updExpType: _updExpType, _delExp: _delExp,
     calcUpDown: calcUpDown, calcWash: calcWash, _markWashManual: _markWashManual,
     _onMemberSearchFocus: _onMemberSearchFocus, _onMemberSearchInput: _onMemberSearchInput, _selectMember: _selectMember,
+    _onChipTypeChange: _onChipTypeChange,
     markPending: markPending, revertPending: revertPending,
+  };
+})();
+
+
+// === src/pages/wallet.js ===
+/**
+ * pages/wallet.js — v2.0 港幣現鈔錢包頁
+ * 餘額大字（負數紅字）+ 本日/本週收支摘要 + 流水列表（可展開自動流水明細）
+ * 手動補登（換匯/墊付/老闆存提/對帳調整/其他，可編輯刪除）；首次使用自填開帳數
+ * 依赖: core/constants.js, core/events.js, core/router.js, data/wallet.js, data/members.js, ui/modal.js, ui/toast.js
+ */
+var WalletPage = (function() {
+  var _expanded = {}; // 展開明細的流水 id
+
+  var MANUAL_CATEGORIES = [
+    { id: 'exchange', label: '換匯' },
+    { id: 'advance',  label: '墊付' },
+    { id: 'owner',    label: '老闆存提' },
+    { id: 'adjust',   label: '對帳調整' },
+    { id: 'other',    label: '其他' },
+  ];
+
+  function fmtHK(n) {
+    return (Math.round(n || 0)).toLocaleString();
+  }
+  function _catLabel(id) {
+    var c = MANUAL_CATEGORIES.find(function(x) { return x.id === id; });
+    return c ? c.label : '其他';
+  }
+  function _typeLabel(w) {
+    switch (w.type) {
+      case 'open': return '開帳';
+      case 'member_tx': return '現金碼';
+      case 'credit_tx': return '信用碼超贏';
+      case 'expense': return '開銷實支';
+      case 'manual': return '補登·' + _catLabel(w.category);
+      default: return w.type || '';
+    }
+  }
+  function _daysAgoStr(n) {
+    var d = new Date(Date.now() - n * 24 * 60 * 60 * 1000);
+    return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2);
+  }
+
+  function _renderOnboarding() {
+    var html = '<div class="wallet-onboard">';
+    html += '<div class="section-desc">港幣現鈔錢包：即時掌握公司手上的現鈔。首次使用請填入<b>目前實際現鈔數</b>作為開帳（過往帳務不回溯），之後新帳務會逐筆自動進錢包。</div>';
+    html += '<div class="form-group" style="max-width:320px;"><label>目前現鈔數（HK$）</label>';
+    html += '<input type="number" inputmode="decimal" step="1" id="wallet-open-amt" class="form-input" placeholder="例：1000000"></div>';
+    html += '<div class="form-group" style="max-width:320px;"><label>開帳日期</label>';
+    html += '<input type="date" id="wallet-open-date" class="form-input" value="' + TWDate.todayStr() + '"></div>';
+    html += '<div class="form-group" style="max-width:320px;"><label>備註（選填）</label>';
+    html += '<input type="text" id="wallet-open-note" class="form-input" placeholder="例：主管交班現鈔"></div>';
+    html += '<button class="btn btn-primary" onclick="WalletPage.saveOpen()">開 帳</button>';
+    html += '</div>';
+    return html;
+  }
+
+  function _detailHtml(w) {
+    var d = w.detail || {};
+    var html = '<div class="wallet-detail">';
+    if (w.type === 'member_tx' || w.type === 'credit_tx') {
+      html += '<div>出碼 ' + fmtHK((d.outCode || 0) * 10000) + ' HK ／ 回碼 ' + fmtHK((d.backCode || 0) * 10000) + ' HK</div>';
+      html += '<div class="wallet-detail-note">' + (d.chipType === 'credit'
+        ? '信用碼：出碼不動現鈔；僅淨贏（回碼−出碼＝' + fmtHK(w.amountHKD) + ' HK）存入錢包'
+        : '現金碼淨額＝回碼−出碼（負數＝公司掏現鈔）') + '</div>';
+    } else if (w.type === 'expense' && d.items) {
+      d.items.forEach(function(it) {
+        html += '<div>' + esc(it.name || '(未命名)') + '：金額 ' + fmtHK(it.amountHK) + ' HK／實支 ' + fmtHK(it.payout) + ' HK'
+          + (it.absorbed ? '（招待，實支照扣）' : '') + '</div>';
+      });
+      html += '<div class="wallet-detail-note">實支合計 ' + fmtHK(-w.amountHKD) + ' HK 從錢包扣除；金額（收會員/代理）走交收，不進錢包</div>';
+    } else if (w.note) {
+      html += '<div>' + esc(w.note) + '</div>';
+    }
+    html += '</div>';
+    return html;
+  }
+
+  function render() {
+    var el = document.getElementById('page-wallet');
+    if (!el) return;
+    if (typeof Wallet === 'undefined' || !Wallet.isOpened()) {
+      el.innerHTML = _renderOnboarding();
+      return;
+    }
+
+    // 依時間正序算累計餘額，顯示時反轉（最新在上）
+    var entries = Wallet.getAll().slice().sort(function(a, b) { return (a.createdAt || 0) - (b.createdAt || 0); });
+    var run = 0;
+    entries.forEach(function(w) { run += (w.amountHKD || 0); w._run = run; });
+    var bal = Wallet.balance();
+
+    var today = TWDate.todayStr();
+    var weekStart = _daysAgoStr(6);
+    var dayIn = 0, dayOut = 0, weekIn = 0, weekOut = 0;
+    entries.forEach(function(w) {
+      var amt = w.amountHKD || 0;
+      if (w.date === today) { if (amt >= 0) dayIn += amt; else dayOut += -amt; }
+      if (w.date && w.date >= weekStart) { if (amt >= 0) weekIn += amt; else weekOut += -amt; }
+    });
+
+    var html = '';
+    html += '<div class="wallet-balance-card' + (bal < 0 ? ' neg' : '') + '">';
+    html += '<div class="wallet-balance-label">港幣現鈔餘額</div>';
+    html += '<div class="wallet-balance-num">HK$ ' + fmtHK(bal) + '</div>';
+    if (bal < 0) html += '<div class="wallet-balance-warn">⚠ 餘額為負，請立即對帳</div>';
+    html += '</div>';
+
+    html += '<div class="wallet-summary">';
+    html += '<div><b>本日</b><br>收 ' + fmtHK(dayIn) + ' ／ 支 ' + fmtHK(dayOut) + '</div>';
+    html += '<div><b>本週</b><br>收 ' + fmtHK(weekIn) + ' ／ 支 ' + fmtHK(weekOut) + '</div>';
+    html += '<div><b>流水</b><br>' + entries.length + ' 筆</div>';
+    html += '</div>';
+
+    html += '<div class="wallet-toolbar"><button class="btn btn-primary" onclick="WalletPage.showAddManual()">＋ 補登</button></div>';
+    html += '<p class="section-desc">只記實際掏出/收回的港幣現鈔；交收回款走結算系統不進錢包。點列可展開明細（自動流水由帳務產生，如需修改請改帳務）。</p>';
+
+    var list = entries.slice().reverse();
+    if (list.length === 0) {
+      html += '<div class="empty">尚無流水</div>';
+    } else {
+      html += '<div class="wallet-list">';
+      list.forEach(function(w) {
+        var amt = w.amountHKD || 0;
+        var isOpen = !!_expanded[w.id];
+        html += '<div class="wallet-item' + (isOpen ? ' open' : '') + '" onclick="WalletPage.toggleDetail(\'' + escJs(w.id) + '\')">';
+        html += '<div class="wallet-item-head">';
+        html += '<div class="wallet-item-main"><span class="wallet-item-type">' + _typeLabel(w) + '</span>'
+          + '<span class="wallet-item-note">' + esc(w.type === 'manual' ? (w.note || _catLabel(w.category)) : (w.note || '')) + '</span></div>';
+        html += '<div class="wallet-item-amts"><span class="wallet-item-amt ' + (amt >= 0 ? 'in' : 'out') + '">' + (amt >= 0 ? '+' : '−') + fmtHK(Math.abs(amt)) + '</span>'
+          + '<span class="wallet-item-run">餘 ' + fmtHK(w._run) + '</span></div>';
+        html += '</div>';
+        html += '<div class="wallet-item-sub">' + esc(w.date || '') + (w.tripId ? ' · 團 ' + esc(w.tripId) : '') + '</div>';
+        if (isOpen) html += _detailHtml(w);
+        if (isOpen && w.type === 'manual') {
+          html += '<div class="wallet-item-actions">'
+            + '<button class="btn-sm" onclick="event.stopPropagation();WalletPage.showEditManual(\'' + escJs(w.id) + '\')">編輯</button> '
+            + '<button class="btn-sm btn-danger" onclick="event.stopPropagation();WalletPage.delManual(\'' + escJs(w.id) + '\')">刪除</button>'
+            + '</div>';
+        }
+        html += '</div>';
+      });
+      html += '</div>';
+    }
+    el.innerHTML = html;
+  }
+
+  function toggleDetail(id) {
+    _expanded[id] = !_expanded[id];
+    render();
+  }
+
+  function saveOpen() {
+    var amtEl = document.getElementById('wallet-open-amt');
+    var dateEl = document.getElementById('wallet-open-date');
+    var noteEl = document.getElementById('wallet-open-note');
+    var amt = amtEl ? parseFloat(amtEl.value) : NaN;
+    if (isNaN(amt) || amt < 0) { Toast.error('請輸入正確的目前現鈔數'); return; }
+    var entry = Wallet.openAccount(amt, dateEl ? dateEl.value : '', noteEl ? noteEl.value : '');
+    if (entry) {
+      Toast.success('錢包已開帳：HK$ ' + fmtHK(amt));
+      render();
+    }
+  }
+
+  function showAddManual() {
+    var html = '';
+    html += '<div class="form-row">';
+    html += '<div class="form-group"><label>方向</label><select id="wm-dir" class="form-input"><option value="in">收入（現鈔進來）</option><option value="out">支出（現鈔出去）</option></select></div>';
+    html += '<div class="form-group"><label>分類</label><select id="wm-cat" class="form-input">';
+    MANUAL_CATEGORIES.forEach(function(c) {
+      html += '<option value="' + c.id + '">' + c.label + '</option>';
+    });
+    html += '</select></div>';
+    html += '</div>';
+    html += '<div class="form-row">';
+    html += '<div class="form-group"><label>金額(HK$)</label><input type="number" inputmode="decimal" step="1" min="0" id="wm-amt" class="form-input" placeholder="例：50000"></div>';
+    html += '<div class="form-group"><label>日期</label><input type="date" id="wm-date" class="form-input" value="' + TWDate.todayStr() + '"></div>';
+    html += '</div>';
+    html += '<div class="form-group"><label>備註</label><input type="text" id="wm-note" class="form-input" placeholder="例：換匯領鈔／墊付計程車資"></div>';
+    html += '<div class="row-actions"><button class="btn btn-primary" onclick="WalletPage.saveManual()">儲存</button></div>';
+    Modal.open('錢包補登', html);
+  }
+  function saveManual() {
+    var dir = document.getElementById('wm-dir').value;
+    var cat = document.getElementById('wm-cat').value;
+    var amt = parseFloat(document.getElementById('wm-amt').value);
+    var date = document.getElementById('wm-date').value || TWDate.todayStr();
+    var note = document.getElementById('wm-note').value || '';
+    if (isNaN(amt) || amt <= 0) { Toast.error('請輸入正確金額'); return; }
+    Wallet.addManual({ category: cat, amountHKD: dir === 'out' ? -amt : amt, date: date, note: note });
+    Modal.close();
+    Toast.success('已補登 ' + (dir === 'out' ? '支出' : '收入') + ' HK$ ' + fmtHK(amt));
+    render();
+  }
+
+  function showEditManual(id) {
+    var w = Wallet.getById(id);
+    if (!w || w.type !== 'manual') return;
+    var html = '';
+    html += '<div class="form-row">';
+    html += '<div class="form-group"><label>方向</label><select id="wm-dir" class="form-input"><option value="in"' + ((w.amountHKD || 0) >= 0 ? ' selected' : '') + '>收入（現鈔進來）</option><option value="out"' + ((w.amountHKD || 0) < 0 ? ' selected' : '') + '>支出（現鈔出去）</option></select></div>';
+    html += '<div class="form-group"><label>分類</label><select id="wm-cat" class="form-input">';
+    MANUAL_CATEGORIES.forEach(function(c) {
+      html += '<option value="' + c.id + '"' + (w.category === c.id ? ' selected' : '') + '>' + c.label + '</option>';
+    });
+    html += '</select></div>';
+    html += '</div>';
+    html += '<div class="form-row">';
+    html += '<div class="form-group"><label>金額(HK$)</label><input type="number" inputmode="decimal" step="1" min="0" id="wm-amt" class="form-input" value="' + Math.abs(w.amountHKD || 0) + '"></div>';
+    html += '<div class="form-group"><label>日期</label><input type="date" id="wm-date" class="form-input" value="' + (w.date || TWDate.todayStr()) + '"></div>';
+    html += '</div>';
+    html += '<div class="form-group"><label>備註</label><input type="text" id="wm-note" class="form-input" value="' + escAttr(w.note || '') + '"></div>';
+    html += '<div class="row-actions"><button class="btn btn-primary" onclick="WalletPage.saveEditManual(\'' + id + '\')">儲存</button></div>';
+    Modal.open('編輯補登', html);
+  }
+  function saveEditManual(id) {
+    var dir = document.getElementById('wm-dir').value;
+    var amt = parseFloat(document.getElementById('wm-amt').value);
+    if (isNaN(amt) || amt <= 0) { Toast.error('請輸入正確金額'); return; }
+    Wallet.updateManual(id, {
+      category: document.getElementById('wm-cat').value,
+      amountHKD: dir === 'out' ? -amt : amt,
+      date: document.getElementById('wm-date').value || TWDate.todayStr(),
+      note: document.getElementById('wm-note').value || '',
+    });
+    Modal.close();
+    Toast.success('補登已更新');
+    render();
+  }
+  function delManual(id) {
+    Modal.confirm('確定刪除這筆補登？', function() {
+      if (Wallet.removeManual(id)) {
+        Toast.success('已刪除');
+        render();
+      } else {
+        Toast.error('自動流水不可刪除（請修改對應帳務）');
+      }
+    });
+  }
+
+  // 錢包資料同步後自動刷新（目前在錢包頁時）
+  EventBus.on(EVENTS.WALLET_TXS_LOADED, function() {
+    if (typeof Router !== 'undefined' && Router.getCurrent() === 'wallet') {
+      try { render(); } catch (e) {}
+    }
+  });
+
+  return {
+    render: render, toggleDetail: toggleDetail,
+    saveOpen: saveOpen,
+    showAddManual: showAddManual, saveManual: saveManual,
+    showEditManual: showEditManual, saveEditManual: saveEditManual, delManual: delManual,
   };
 })();
 
@@ -10755,7 +11321,7 @@ var HistoryPage = (function() {
 
       // 第一區：出碼、回碼、上下分
       html += '<div class="mb-card-section">';
-      html += '<div class="mb-card-row"><span class="mb-card-label">出碼</span><span class="mb-card-val">' + fmtCardNum(tx.outCode || 0) + ' HK萬</span></div>';
+      html += '<div class="mb-card-row"><span class="mb-card-label">出碼' + (tx.chipType === 'credit' ? ' <span class="chip-credit-tag">信用</span>' : '') + '</span><span class="mb-card-val">' + fmtCardNum(tx.outCode || 0) + ' HK萬</span></div>';
       html += '<div class="mb-card-row"><span class="mb-card-label">回碼</span><span class="mb-card-val">' + fmtCardNum(tx.backCode || 0) + ' HK萬</span></div>';
       html += '<div class="mb-card-row"><span class="mb-card-label">上下分</span><span class="mb-card-val ' + (isNeg ? 'num-negative' : 'num-positive') + '">' + fmtCardNum(tx.upDown || 0) + ' HK萬</span></div>';
       html += '</div>';
@@ -11900,6 +12466,7 @@ function exposeGlobals() {
   window.Shareholders = Shareholders;
   window.Trips = Trips;
   window.MemberTxs = MemberTxs;
+  window.Wallet = Wallet; // v2.0 港幣現鈔錢包
   window.Bookings = Bookings;
   window.Supplements = Supplements;
   window.Settings = Settings;
@@ -11919,6 +12486,7 @@ function exposeGlobals() {
   window.OverviewPage = OverviewPage;
   window.PendingPage = PendingPage;
   window.MemberPage = MemberPage;
+  window.WalletPage = WalletPage; // v2.0 港幣現鈔錢包
   window.RoomPage = RoomPage;
   window.FeesPage = FeesPage;
   window.ProfitPage = ProfitPage;
@@ -11951,6 +12519,7 @@ function onPageChange(pageName) {
     'overview':    function() { OverviewPage.render(); },
     'pending':     function() { PendingPage.render(); },
     'member':      function() { MemberPage.render(); },
+    'wallet':      function() { WalletPage.render(); }, // v2.0 港幣現鈔錢包
     'room':        function() { RoomPage.render(); },
     'fees':        function() { FeesPage.render(); },
     'profit':      function() { ProfitPage.render(); },
@@ -11973,6 +12542,7 @@ function loadAllData() {
   Shareholders.load();
   Trips.load();
   MemberTxs.load();
+  Wallet.load(); // v2.0 港幣現鈔錢包
   Bookings.load();
   Supplements.load();
   Settings.load();
@@ -12065,6 +12635,12 @@ function initApp() {
   // 2. 載入本地資料
   loadAllData();
 
+  // 2b. v2.0 港幣現鈔錢包：帳務任何異動 → 錢包流水同步（冪等，涵蓋手動/Bot/衝突解決/回收站還原所有寫入路徑）
+  EventBus.on(EVENTS.MTX_CREATED, function(tx) { try { Wallet.syncForTx(tx); } catch (e) { console.error('[Wallet] syncForTx', e); } });
+  EventBus.on(EVENTS.MTX_UPDATED, function(tx) { try { Wallet.syncForTx(tx); } catch (e) { console.error('[Wallet] syncForTx', e); } });
+  EventBus.on(EVENTS.MTX_DELETED, function(id) { try { Wallet.removeForTx(id); } catch (e) { console.error('[Wallet] removeForTx', e); } });
+  EventBus.on(EVENTS.MTX_LOADED, function() { try { Wallet.reconcileAll(); } catch (e) { console.error('[Wallet] reconcileAll', e); } });
+
   // 3. 键盘快捷键
   Keyboard.init();
 
@@ -12084,6 +12660,7 @@ function initApp() {
         SHAREHOLDERS: State.get('shareholders'),
         TRIPS: State.get('trips'),
         MEMBER_TXS: State.get('memberTxs'),
+        WALLET_TXS: State.get('walletTxs'),
         BOOKINGS: State.get('bookings'),
         SUPPLEMENTS: State.get('supplements'),
         SETTINGS: State.get('settings'),
@@ -14096,11 +14673,12 @@ function renderNav(){var nav=document.getElementById("nav-list");if(!nav)return;
 // ============================================================================
 // v1.4.0 手機 App 式底部標籤列（4 主功能 + 更多選單，有圖示也有文字）
 // ============================================================================
-var MOBILE_TABS = ['overview', 'pending', 'member', 'room'];
+var MOBILE_TABS = ['overview', 'pending', 'member', 'wallet', 'room'];
 var MOBILE_TAB_DESC = {
   overview:    '今日營運重點一覽',
   pending:     '查看尚未結帳的客人',
   member:      '會員積分與帳務作業',
+  wallet:      '港幣現鈔餘額與進出流水', // v2.0 港幣現鈔錢包
   room:        '房間狀態與排房',
   shareholder: '股東佔比與分潤計算',
   membersMgmt: '員工帳號與權限管理',
