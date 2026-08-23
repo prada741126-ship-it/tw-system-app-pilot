@@ -1675,7 +1675,7 @@ function _dataDiffers(a, b) {
   Object.keys(a).forEach(function(k) { keys[k] = true; });
   Object.keys(b).forEach(function(k) { keys[k] = true; });
   for (var k in keys) {
-    if (k === '_updatedAt' || k === '_reviveAt') continue;
+    if (k === '_updatedAt' || k === '_reviveAt' || k === '_run') continue; // v2.1.2 _run 為顯示用欄位，不參與衝突比對
     if (_stableStringify(a[k]) !== _stableStringify(b[k])) return true;
   }
   return false;
@@ -3531,10 +3531,28 @@ var MemberTxs = (function() {
 var Wallet = (function() {
   function load() {
     var arr = Store.readArray(STORAGE_KEYS.WALLET_TXS);
+    // v2.1.2 遷移：清除 v2.0 誤存進流水的顯示用 _run 欄位（污染雲端比對造成重複衝突誤報）
+    var dirty = false;
+    arr.forEach(function(w) {
+      if (w && w._run !== undefined) { delete w._run; w._updatedAt = Date.now(); dirty = true; }
+    });
     State.set('walletTxs', arr);
+    if (dirty) {
+      save(arr);
+      var obj = {};
+      arr.forEach(function(w) { if (w && w._fbKey) obj[w._fbKey] = w; });
+      enqueue(FB_PATH.WALLET_TXS, obj); // 回傳乾淨版蓋掉雲端污染
+      // 一併清掉此 bug 產生的 walletTxs 衝突記錄（皆為誤報）
+      if (typeof Conflicts !== 'undefined') {
+        Conflicts.getAll().forEach(function(c) {
+          if (c && c.collection === 'walletTxs') { try { Conflicts.resolve(c.id, 'winner'); } catch (e) {} }
+        });
+      }
+    }
     return arr;
   }
   function save(arr) {
+    if (arr) arr.forEach(function(w) { if (w && w._run !== undefined) delete w._run; }); // v2.1.2 防禦
     Store.writeArray(STORAGE_KEYS.WALLET_TXS, arr);
     State.set('walletTxs', arr);
   }
@@ -8305,9 +8323,12 @@ var WalletPage = (function() {
     }
 
     // 依時間正序算累計餘額，顯示時反轉（最新在上）
+    // v2.1.2 修正：_run 只放顯示用 map，不可寫進存檔物件本體
+    //（否則每新增一筆流水全部舊流水 _run 都變，與雲端回傳值比對不同 → 每輪同步被誤判真衝突狂跳 Toast）
     var entries = Wallet.getAll().slice().sort(function(a, b) { return (a.createdAt || 0) - (b.createdAt || 0); });
     var run = 0;
-    entries.forEach(function(w) { run += (w.amountHKD || 0); w._run = run; });
+    var runMap = {};
+    entries.forEach(function(w) { run += (w.amountHKD || 0); runMap[w.id] = run; });
     var bal = Wallet.balance();
 
     var today = TWDate.todayStr();
@@ -8348,7 +8369,7 @@ var WalletPage = (function() {
         html += '<div class="wallet-item-main"><span class="wallet-item-type">' + _typeLabel(w) + '</span>'
           + '<span class="wallet-item-note">' + esc(w.type === 'manual' ? (w.note || _catLabel(w.category)) : (w.note || '')) + '</span></div>';
         html += '<div class="wallet-item-amts"><span class="wallet-item-amt ' + (amt >= 0 ? 'in' : 'out') + '">' + (amt >= 0 ? '+' : '−') + fmtHK(Math.abs(amt)) + '</span>'
-          + '<span class="wallet-item-run">餘 ' + fmtHK(w._run) + '</span></div>';
+          + '<span class="wallet-item-run">餘 ' + fmtHK(runMap[w.id] || 0) + '</span></div>';
         html += '</div>';
         html += '<div class="wallet-item-sub">' + esc(w.date || '') + (w.tripId ? ' · 團 ' + esc(w.tripId) : '') + '</div>';
         if (isOpen) html += _detailHtml(w);
