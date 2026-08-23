@@ -6,7 +6,7 @@
  *   - 其他 → stale-while-revalidate
  */
 
-var CACHE_VERSION = 'tw-app-v2.2.3';  /// 2026-08-23 v2.2.3 固定票種(水舞間/水上樂園)改吃設定頁門票預設價格,單一資料來源隨設定即時變動;品項下拉分組(門票/其他品項/自訂)
+var CACHE_VERSION = 'tw-app-v2.2.4';  /// 2026-08-23 v2.2.4 稽核修復:墊付實支自動=成本價x數量(修短扣),切換品項即更新價格(修殘留舊價),墊付固定票存票種帶入帳務利潤不再漏算,各集合id加隨機後綴防同毫秒碰撞
 var STATIC_CACHE = CACHE_VERSION + '-static';
 var RUNTIME_CACHE = CACHE_VERSION + '-runtime';
 
