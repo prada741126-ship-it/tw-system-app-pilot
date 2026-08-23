@@ -3472,7 +3472,7 @@ var MemberTxs = (function() {
   }
   function create(data) {
     var now = Date.now();
-    var id = 'mtx_' + data.tripId + '_' + data.memberId + '_' + now;
+    var id = 'mtx_' + data.tripId + '_' + data.memberId + '_' + now + '_' + Math.random().toString(36).slice(2, 4); // v2.2.4 防同毫秒碰撞
     var calcResult = calcMemberTx(data);
 
     var tx = Object.assign({}, data, calcResult, {
@@ -3838,7 +3838,7 @@ var Wallet = (function() {
   function openAccount(amountHKD, date, note) {
     if (isOpened()) return null;
     var entry = {
-      id: 'wtx_open_' + Date.now(),
+      id: 'wtx_open_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
       type: 'open', amountHKD: Math.round(amountHKD) || 0,
       date: date || TWDate.todayStr(),
       note: note || '錢包開帳（目前現鈔數）',
@@ -3848,7 +3848,7 @@ var Wallet = (function() {
   }
   function addManual(data) {
     var entry = {
-      id: 'wtx_m_' + Date.now(),
+      id: 'wtx_m_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
       type: 'manual',
       category: data.category || 'other',
       amountHKD: Math.round(data.amountHKD) || 0,
@@ -4005,8 +4005,9 @@ var PendExps = (function() {
 
   function create(data) {
     var now = Date.now();
+    var uid = 'PE' + now + '_' + Math.random().toString(36).slice(2, 6); // v2.2.4 防同毫秒碰撞
     var p = {
-      id: 'PE' + now,
+      id: uid,
       tripId: data.tripId || '',
       agentId: data.agentId || '',
       shareholderId: data.shareholderId || '',
@@ -4020,7 +4021,7 @@ var PendExps = (function() {
         return row;
       }),
       createdAt: now,
-      _fbKey: 'PE' + now,
+      _fbKey: uid,
       _updatedAt: now,
     };
     if (!Schema.sanitize('pendingExps', p)) return null;
@@ -4123,15 +4124,16 @@ var Loans = (function() {
     var now = Date.now();
     var amount = Math.round(data.amountHKD || 0);
     if (!data.memberId || amount <= 0) return null;
+    var uid = 'LN' + now + '_' + Math.random().toString(36).slice(2, 6); // v2.2.4 防同毫秒碰撞
     var l = {
-      id: 'LN' + now,
+      id: uid,
       memberId: data.memberId,
       date: data.date || TWDate.todayStr(),
       note: data.note || '',
       amountHKD: amount,
       repayments: [],
       createdAt: now,
-      _fbKey: 'LN' + now,
+      _fbKey: uid,
       _updatedAt: now,
     };
     if (!Schema.sanitize('loans', l)) return null;
@@ -4354,14 +4356,18 @@ var Catalog = (function() {
     html += '<option value="__custom__"' + ((!selFixed && !selCat) ? ' selected' : '') + '>＋ 自訂品名…</option>';
     return html;
   }
-  /** 由下拉值解析品項：固定票 { name, guestPrice, ourPrice, isFixed:true } / catalog 品項 / null(自訂) */
+  /** 由下拉值解析品項：固定票 { name, guestPrice, ourPrice, isFixed:true, ticketType } / catalog 品項 / null(自訂) */
   function resolvePick(val) {
     if (!val || val === '__custom__') return null;
     var fixed = fixedTickets().find(function(t) { return t.key === val; });
-    if (fixed) return { name: fixed.name, guestPrice: fixed.guestPrice, ourPrice: fixed.ourPrice, isFixed: true };
+    if (fixed) {
+      // 'WD1' → 'wd-1'、'WP' → 'wp'（與會員帳務票種下拉同鍵，利潤報表才能計入）
+      var tt = (val === 'WP') ? 'wp' : ('wd-' + val.substring(2));
+      return { name: fixed.name, guestPrice: fixed.guestPrice, ourPrice: fixed.ourPrice, isFixed: true, ticketType: tt };
+    }
     var c = getById(val);
     if (!c) return null;
-    return { name: c.name, guestPrice: c.defaultPriceHK || 0, ourPrice: c.defaultPriceHK || 0, isFixed: false };
+    return { name: c.name, guestPrice: c.defaultPriceHK || 0, ourPrice: c.defaultPriceHK || 0, isFixed: false, ticketType: 'other' };
   }
 
   function create(data) {
@@ -8209,6 +8215,7 @@ var MemberPage = (function() {
       }
     } else if (field === 'amountHK') {
       row.amountHK = parseFloat(val) || 0;
+      row._amtManual = row.amountHK !== 0; // v2.2.4 手改金額後，切換品項不再自動覆寫
       // v2.0 金額手改 → 實支跟隨（未手動覆蓋實支時）
       if (!row.payoutManual) {
         row.payout = row.amountHK;
@@ -8220,25 +8227,20 @@ var MemberPage = (function() {
     }
   }
   // v2.2.2 品項主檔：選 catalog 自動帶 name + unitPrice + ourPrice，並刷新金額欄（v2.2.3 改用 resolvePick 統一取價）
+  // v2.2.4 修：切換品項一律重帶新品項價格（原本只在空值時帶入，換品項會殘留舊價造成錯帳）
   function _updExpCatalog(i, val, sel) {
     if (!_expenseRows[i]) return;
     var row = _expenseRows[i];
     var pick = Catalog.resolvePick(val);
     if (!pick) return; // 自訂不動 row，由用戶在 name 輸入框自由打
-    var prevName = row.name;
     row.name = pick.name;
-    // 若 unitPrice 未設或等於原品名單價，自動帶入
-    if (!row.unitPrice || row.unitPrice === 0) {
-      if (pick.guestPrice > 0) row.unitPrice = pick.guestPrice;
-    }
-    if (!row.ourPrice || row.ourPrice === 0) {
-      if (pick.ourPrice > 0) row.ourPrice = pick.ourPrice;
-    }
-    // amountHK 未手動改過 → 同步成 unitPrice × quantity
+    row.ticketType = pick.ticketType || 'other';
+    if (pick.guestPrice > 0) row.unitPrice = pick.guestPrice;
+    if (pick.ourPrice > 0) row.ourPrice = pick.ourPrice;
+    // 金額未手改過 → 同步成 unitPrice × quantity
     var qty = row.quantity || 1;
-    if (row.unitPrice) {
-      var prevAuto = (prevName === '') || (row.amountHK === 0) || (row.unitPrice && row.amountHK === row.unitPrice * qty);
-      if (prevAuto) row.amountHK = Math.round((row.unitPrice * qty) * 100) / 100;
+    if (row.unitPrice && !row._amtManual) {
+      row.amountHK = Math.round((row.unitPrice * qty) * 100) / 100;
       if (!row.payoutManual) row.payout = _expPayoutDefault(row);
     }
     // 同步畫面金額/實支欄
@@ -9125,40 +9127,49 @@ var WalletPage = (function() {
       var presetItem = fixed ? null : Catalog.findByName(r.name);
       var cat = fixed ? fixed.key : (presetItem ? presetItem.id : '__custom__');
       var isCustom = !fixed && !presetItem;
-      html += '<div class="form-row wp-pend-row">'
+      html += '<div class="form-row wp-pend-row" data-idx="' + i + '">'
         + '<div class="form-group" style="flex:1 1 220px"><label>品名</label><select class="form-input wp-pend-cat" data-idx="' + i + '" onchange="WalletPage._wpOnItemChange(' + i + ',this)">'
         + Catalog.pickerOptionsHtml(cat, r.name)
         + '</select>'
         + '<input type="text" class="form-input wp-pend-custom" data-idx="' + i + '" value="' + escAttr(r.name || '') + '" placeholder="輸入新名稱" style="margin-top:4px;display:' + (isCustom ? 'block' : 'none') + '" oninput="WalletPage._wpSetRow(' + i + ',\'name\',this.value)">'
         + '</div>'
         + '<div class="form-group"><label>數量</label><input type="number" min="1" step="1" class="form-input" value="' + (r.qty || 1) + '" oninput="WalletPage._wpSetRow(' + i + ',\'qty\',this.value)"></div>'
-        + '<div class="form-group"><label>實支HK$</label><input type="number" inputmode="decimal" min="0" step="1" class="form-input" value="' + escAttr(r.pay) + '" placeholder="例：1756" oninput="WalletPage._wpSetRow(' + i + ',\'pay\',this.value)"></div>'
+        + '<div class="form-group"><label>實支HK$</label><input type="number" inputmode="decimal" min="0" step="1" class="form-input wp-pend-pay" value="' + escAttr(r.pay) + '" placeholder="例：1756" oninput="WalletPage._wpSetRow(' + i + ',\'pay\',this.value)"></div>'
         + '<div class="form-group"><label>&nbsp;</label><button class="btn-sm btn-danger" onclick="WalletPage._wpDelRow(' + i + ')">刪</button></div>'
         + '</div>';
     });
     el.innerHTML = html;
   }
-  /** 切換固定票/品項/自訂：自動帶入品名與預設單價（固定票帶設定頁成本價 ourPrice；只覆寫空值） */
+  /**
+   * v2.2.4 切換固定票/品項/自訂：
+   * - 記住 _pick（含單價/售價/票種），實支自動 = 成本價 × 數量（未手改過實支才覆寫）
+   * - 切換品項一律重帶新品項價格（修殘留舊價 bug）
+   */
   function _wpOnItemChange(i, sel) {
     if (!_wpPendRows[i]) return;
     var v = sel.value;
     var customEl = document.querySelector('.wp-pend-custom[data-idx="' + i + '"]');
     var pick = Catalog.resolvePick(v);
     if (!pick) {
-      if (customEl) customEl.style.display = 'block';
+      if (customEl) { customEl.style.display = 'block'; customEl.value = ''; }
+      _wpPendRows[i]._pick = null; // 自訂 → 清除單價記憶
+      _wpPendRows[i]._payManual = false;
       return;
     }
     if (customEl) customEl.style.display = 'none';
     _wpPendRows[i].name = pick.name;
-    _wpPendRows[i]._payTouched = !!(_wpPendRows[i].pay && _wpPendRows[i].pay !== ''); // 用戶改過就不再覆寫
-    if (!_wpPendRows[i]._payTouched && pick.ourPrice > 0) {
-      _wpPendRows[i].pay = String(pick.ourPrice);
-      var inputs = document.querySelectorAll('.wp-pend-row[data-idx="' + i + '"] input[type="number"]');
-      if (inputs.length >= 2) inputs[1].value = pick.ourPrice;
+    _wpPendRows[i]._pick = { unitPay: pick.ourPrice, unitPrice: pick.guestPrice, ticketType: pick.ticketType };
+    if (!_wpPendRows[i]._payManual && pick.ourPrice > 0) {
+      var qty = Math.max(1, parseInt(_wpPendRows[i].qty) || 1);
+      _wpPendRows[i].pay = String(pick.ourPrice * qty);
+      _syncWpPayInput(i);
     }
-    // 同步顯示文字輸入（自訂用）的值
     if (customEl) customEl.value = pick.name;
-    _wpPendRows[i]._payTouched = false; // 重置（避免後續切換又把 pay 視為 touched）
+  }
+  /** 更新畫面上的實支欄（僅改 value，不重 render 避免打斷輸入） */
+  function _syncWpPayInput(i) {
+    var el = document.querySelector('.wp-pend-row[data-idx="' + i + '"] .wp-pend-pay');
+    if (el) el.value = _wpPendRows[i].pay;
   }
   // 別名以便其它地方復用（MemberPage 預支/帳務開銷會用 _catPickerRow）
   function _catPickerRow(rowIdx, row, onSetRow) {
@@ -9175,8 +9186,21 @@ var WalletPage = (function() {
   }
   function _wpSetRow(i, k, v) {
     if (!_wpPendRows[i]) return;
-    if (k === 'qty') _wpPendRows[i].qty = Math.max(1, parseInt(v) || 1);
-    else _wpPendRows[i][k] = v;
+    if (k === 'qty') {
+      _wpPendRows[i].qty = Math.max(1, parseInt(v) || 1);
+      // v2.2.4 數量變更 → 未手改實支時自動重算（成本價 × 數量）
+      var pk = _wpPendRows[i]._pick;
+      if (pk && !_wpPendRows[i]._payManual && pk.unitPay > 0) {
+        _wpPendRows[i].pay = String(pk.unitPay * _wpPendRows[i].qty);
+        _syncWpPayInput(i);
+      }
+    } else if (k === 'pay') {
+      _wpPendRows[i].pay = v;
+      _wpPendRows[i]._payManual = !!(v && v !== ''); // 手動填過就不再自動覆寫
+    } else {
+      _wpPendRows[i][k] = v;
+      if (k === 'name') _wpPendRows[i]._pick = null; // 手改品名 → 自訂
+    }
   }
   function _wpAddRow() { _wpPendRows.push({ name: '', qty: 1, pay: '' }); _renderWpPendRows(); }
   function _wpDelRow(i) {
@@ -9287,7 +9311,15 @@ var WalletPage = (function() {
     _wpPendRows.forEach(function(r) {
       var pay = parseFloat(r.pay);
       if (!r.name || isNaN(pay) || pay <= 0) return;
-      rows.push({ name: (r.name || '').trim(), quantity: Math.max(1, parseInt(r.qty) || 1), amountHK: pay, payout: pay });
+      var pk = r._pick || {};
+      rows.push({
+        name: (r.name || '').trim(),
+        quantity: Math.max(1, parseInt(r.qty) || 1),
+        ticketType: pk.ticketType || 'other', // v2.2.4 固定票存 wd-N/wp，帶入帳務後利潤報表才計得進
+        unitPrice: pk.unitPrice || 0,          // 售價（向會員收）
+        ourPrice: (pk.unitPay != null && pk.unitPay !== '') ? pk.unitPay : null, // 成本單價
+        amountHK: pay, payout: pay,            // 實支總額（錢包扣款依據）
+      });
     });
     if (rows.length === 0) { Toast.error('請至少填一筆明細（品名＋實支金額）'); return; }
     var btn = document.getElementById('wp-pend-save-btn');
