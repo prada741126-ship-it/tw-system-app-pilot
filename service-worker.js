@@ -6,7 +6,7 @@
  *   - 其他 → stale-while-revalidate
  */
 
-var CACHE_VERSION = 'tw-app-v1.9.11';  /// 2026-08-23 載入守門:開帳務表單時自動清除舊資料殘留的 absorbed:true 並Toast提示,防誤存帳務被算成代理吸收
+var CACHE_VERSION = 'tw-app-v2.0.0';  /// 2026-08-23 v2.0 新增港幣現金錢包:總錢包頁(底部導航)+現金/信用籌碼切換+開銷實支欄+自動同步流水+開帳/補登
 var STATIC_CACHE = CACHE_VERSION + '-static';
 var RUNTIME_CACHE = CACHE_VERSION + '-runtime';
 
