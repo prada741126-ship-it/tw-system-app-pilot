@@ -6,7 +6,7 @@
  *   - 其他 → stale-while-revalidate
  */
 
-var CACHE_VERSION = 'tw-app-v2.1.1';  /// 2026-08-23 v2.1.1 錢包開帳可編輯/刪除+自動流水「前往修改來源」跳轉
+var CACHE_VERSION = 'tw-app-v2.1.2';  /// 2026-08-23 v2.1.2 修復:錢包顯示用 _run 欄位污染存檔造成每輪同步誤報衝突
 var STATIC_CACHE = CACHE_VERSION + '-static';
 var RUNTIME_CACHE = CACHE_VERSION + '-runtime';
 
