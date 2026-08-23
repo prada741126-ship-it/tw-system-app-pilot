@@ -4219,12 +4219,8 @@ var Loans = (function() {
  * 預載常用票券單價，可隨時 CRUD；墊付／預支／帳務開銷三處皆可選擇帶入預設單價。
  */
 var Catalog = (function() {
-  // 預設單價先留 0，使用者第一次使用後到「品項設定」補單價；後續選取即自動帶入。
+  // v2.2.3 水舞間/水上樂園改吃設定頁「門票預設價格」（單一資料來源），Catalog 只種設定頁沒有的品項
   var SEED_ITEMS = [
-    { name: '水舞間（普通席）', category: 'show', defaultPriceHK: 0 },
-    { name: '水舞間（豪華席）', category: 'show', defaultPriceHK: 0 },
-    { name: '水舞間（VIP 席）', category: 'show', defaultPriceHK: 0 },
-    { name: '新濠天地 - 水樂園門票', category: 'park', defaultPriceHK: 0 },
     { name: '新濠影匯 - 童夢天地', category: 'park', defaultPriceHK: 0 },
     { name: '巴黎人 - 巴黎鐵塔', category: 'tower', defaultPriceHK: 0 },
     { name: '巴黎人 - teamLab 門票', category: 'show', defaultPriceHK: 0 },
@@ -4261,6 +4257,24 @@ var Catalog = (function() {
       });
       save(arr);
     }
+    // v2.2.3 遷移：水舞間/水樂園改吃設定頁價格，舊 seed 未補價的軟刪（用戶已補價的保留）
+    var now2 = Date.now();
+    var dropped = [];
+    arr = arr.map(function(c) {
+      if (!c._deleted && c.isSeed && !(c.defaultPriceHK > 0)
+          && (String(c.name).indexOf('水舞間') === 0 || c.name === '新濠天地 - 水樂園門票')) {
+        c._deleted = true;
+        c._updatedAt = now2;
+        dropped.push(c);
+      }
+      return c;
+    });
+    if (dropped.length) {
+      save(arr);
+      var obj = {};
+      dropped.forEach(function(c) { obj[c._fbKey] = c; });
+      enqueue(FB_PATH.CATALOG, obj);
+    }
     State.set('catalog', arr);
     return arr;
   }
@@ -4290,12 +4304,72 @@ var Catalog = (function() {
     return order;
   }
 
+  // ===== v2.2.3 固定票種：直接讀設定頁「門票預設價格」，價格隨設定即時變動（單一資料來源）=====
+  function fixedTickets() {
+    var tp = (typeof Settings !== 'undefined' && Settings.getTicketPrices) ? Settings.getTicketPrices() : {};
+    var out = [];
+    (tp.waterDance || []).forEach(function(t, i) {
+      out.push({ key: 'WD' + i, name: '水舞間 ' + t.name, guestPrice: t.guestPrice || 0, ourPrice: t.ourPrice || 0, category: 'show' });
+    });
+    var wp = tp.waterPark || { guestPrice: 450, ourPrice: 406 };
+    out.push({ key: 'WP', name: '水上樂園手帶', guestPrice: wp.guestPrice || 0, ourPrice: wp.ourPrice || 0, category: 'park' });
+    return out;
+  }
+  function findFixedByName(name) {
+    if (!name) return null;
+    var n = String(name).trim();
+    return fixedTickets().find(function(t) { return t.name === n; }) || null;
+  }
+  /**
+   * 產生下拉 options（optgroup：門票(設定頁價格) → 品項設定 → ＋自訂品名…）
+   * selectedKey: 'WD0'/'WP'（固定票）或 catalog id 或 '__custom__'；selectedName 當 key 未知時 fallback 比對
+   * includeFixed=false 時不含固定票組（會員帳務已有票種下拉，避免繞過 ticketType 利潤計算）
+   */
+  function pickerOptionsHtml(selectedKey, selectedName, includeFixed) {
+    if (includeFixed === undefined) includeFixed = true;
+    var fixed = fixedTickets();
+    var selFixed = (selectedKey && fixed.some(function(t) { return t.key === selectedKey; }))
+      ? fixed.find(function(t) { return t.key === selectedKey; })
+      : (selectedName ? findFixedByName(selectedName) : null);
+    if (!includeFixed) selFixed = null;
+    var selCat = null;
+    if (!selFixed && selectedKey && selectedKey !== '__custom__') selCat = getById(selectedKey) || null;
+    if (!selFixed && !selCat && selectedName) selCat = findByName(selectedName);
+    var html = '';
+    if (includeFixed) {
+      html += '<optgroup label="門票（設定頁價格）">';
+      fixed.forEach(function(t) {
+        var s = (selFixed && selFixed.key === t.key) ? ' selected' : '';
+        html += '<option value="' + t.key + '"' + s + '>' + esc(t.name) + '（售 ' + t.guestPrice + '／成本 ' + t.ourPrice + '）</option>';
+      });
+      html += '</optgroup>';
+    }
+    html += '<optgroup label="其他品項">';
+    getAll().slice().sort(function(a, b) { return a.name.localeCompare(b.name, 'zh'); }).forEach(function(c) {
+      var s = (selCat && selCat.id === c.id) ? ' selected' : '';
+      var lbl = c.name + (c.defaultPriceHK ? '（' + c.defaultPriceHK + '）' : '');
+      html += '<option value="' + escAttr(c.id) + '"' + s + '>' + esc(lbl) + '</option>';
+    });
+    html += '</optgroup>';
+    html += '<option value="__custom__"' + ((!selFixed && !selCat) ? ' selected' : '') + '>＋ 自訂品名…</option>';
+    return html;
+  }
+  /** 由下拉值解析品項：固定票 { name, guestPrice, ourPrice, isFixed:true } / catalog 品項 / null(自訂) */
+  function resolvePick(val) {
+    if (!val || val === '__custom__') return null;
+    var fixed = fixedTickets().find(function(t) { return t.key === val; });
+    if (fixed) return { name: fixed.name, guestPrice: fixed.guestPrice, ourPrice: fixed.ourPrice, isFixed: true };
+    var c = getById(val);
+    if (!c) return null;
+    return { name: c.name, guestPrice: c.defaultPriceHK || 0, ourPrice: c.defaultPriceHK || 0, isFixed: false };
+  }
+
   function create(data) {
     if (!data || !data.name) return null;
     var name = String(data.name).trim();
     if (!name) return null;
-    // 重名檢查
-    if (findByName(name)) return null;
+    // 重名檢查（含固定票種：水舞間/水上樂園由設定頁管理，不可另建同名品項）
+    if (findByName(name) || findFixedByName(name)) return null;
     var now = Date.now();
     var uid = 'CAT' + now + '_' + Math.random().toString(36).slice(2, 6);
     var c = {
@@ -4353,6 +4427,8 @@ var Catalog = (function() {
     findByName: findByName, byCategory: byCategory,
     allCategories: allCategories, categoryLabel: categoryLabel,
     create: create, update: update, remove: remove,
+    fixedTickets: fixedTickets, findFixedByName: findFixedByName,
+    pickerOptionsHtml: pickerOptionsHtml, resolvePick: resolvePick,
     CATEGORY_LABELS: CATEGORY_LABELS,
   };
 })();
@@ -8023,17 +8099,13 @@ var MemberPage = (function() {
         html += '</select>';
         if (row.ticketType === 'other' || !row.ticketType) {
           // v2.2.2 品項主檔：catalog 下拉快速選取＋自動帶預設單價
+          // v2.2.3 水舞間/水上樂園走上方票種下拉（含利潤計算），此下拉只列品項設定＋自訂
           var preset = Catalog.findByName(row.name);
           var selCat = preset ? preset.id : '__custom__';
           html += '<div style="flex:1;min-width:140px;display:flex;flex-direction:column;gap:3px;">'
             + '<select class="form-input" style="flex:1;min-width:100px;" onchange="MemberPage._updExpCatalog(' + i + ',this.value,this)">'
-            + '<option value="__custom__"' + (selCat === '__custom__' ? ' selected' : '') + '>＋ 自訂品名…</option>';
-          Catalog.getAll().slice().sort(function(a, b) { return a.name.localeCompare(b.name, 'zh'); }).forEach(function(c) {
-            var sel = (selCat === c.id) ? ' selected' : '';
-            var lbl = c.name + (c.defaultPriceHK ? '（HK$ ' + c.defaultPriceHK + '）' : '');
-            html += '<option value="' + escAttr(c.id) + '"' + sel + '>' + esc(lbl) + '</option>';
-          });
-          html += '</select>'
+            + Catalog.pickerOptionsHtml(selCat, row.name, false)
+            + '</select>'
             + '<input type="text" placeholder="項目名稱" class="form-input" style="flex:1;min-width:80px;" value="' + escAttr(row.name || '') + '" onchange="MemberPage._updExp(' + i + ',\'name\',this.value)">'
             + '</div>';
         } else {
@@ -8147,21 +8219,20 @@ var MemberPage = (function() {
       row[field] = parseFloat(val) || 0;
     }
   }
-  // v2.2.2 品項主檔：選 catalog 自動帶 name + unitPrice + ourPrice，並刷新金額欄
+  // v2.2.2 品項主檔：選 catalog 自動帶 name + unitPrice + ourPrice，並刷新金額欄（v2.2.3 改用 resolvePick 統一取價）
   function _updExpCatalog(i, val, sel) {
     if (!_expenseRows[i]) return;
     var row = _expenseRows[i];
-    if (val === '__custom__') return; // 自訂不動 row，由用戶在 name 輸入框自由打
-    var item = Catalog.getById(val);
-    if (!item) return;
+    var pick = Catalog.resolvePick(val);
+    if (!pick) return; // 自訂不動 row，由用戶在 name 輸入框自由打
     var prevName = row.name;
-    row.name = item.name;
+    row.name = pick.name;
     // 若 unitPrice 未設或等於原品名單價，自動帶入
     if (!row.unitPrice || row.unitPrice === 0) {
-      if (item.defaultPriceHK > 0) row.unitPrice = item.defaultPriceHK;
+      if (pick.guestPrice > 0) row.unitPrice = pick.guestPrice;
     }
     if (!row.ourPrice || row.ourPrice === 0) {
-      if (item.defaultPriceHK > 0) row.ourPrice = item.defaultPriceHK;
+      if (pick.ourPrice > 0) row.ourPrice = pick.ourPrice;
     }
     // amountHK 未手動改過 → 同步成 unitPrice × quantity
     var qty = row.quantity || 1;
@@ -8177,7 +8248,7 @@ var MemberPage = (function() {
     if (payInput) payInput.value = row.payout || 0;
     // 同步名稱輸入框（讓用戶看到當前選的）
     var nameInput = sel && sel.parentNode ? sel.parentNode.querySelector('input[placeholder="項目名稱"]') : null;
-    if (nameInput) nameInput.value = item.name;
+    if (nameInput) nameInput.value = pick.name;
   }
   function _delExp(i) {
     _expenseRows.splice(i, 1);
@@ -9050,18 +9121,14 @@ var WalletPage = (function() {
     if (!el) return;
     var html = '';
     _wpPendRows.forEach(function(r, i) {
-      var presetItem = Catalog.findByName(r.name);
-      var cat = presetItem ? presetItem.id : '__custom__';
-      var isCustom = !presetItem;
+      var fixed = Catalog.findFixedByName(r.name);
+      var presetItem = fixed ? null : Catalog.findByName(r.name);
+      var cat = fixed ? fixed.key : (presetItem ? presetItem.id : '__custom__');
+      var isCustom = !fixed && !presetItem;
       html += '<div class="form-row wp-pend-row">'
         + '<div class="form-group" style="flex:1 1 220px"><label>品名</label><select class="form-input wp-pend-cat" data-idx="' + i + '" onchange="WalletPage._wpOnItemChange(' + i + ',this)">'
-        + '<option value="__custom__"' + (isCustom ? ' selected' : '') + '>＋ 自訂品名…</option>';
-      Catalog.getAll().slice().sort(function(a, b) { return a.name.localeCompare(b.name, 'zh'); }).forEach(function(c) {
-        var sel = (cat === c.id) ? ' selected' : '';
-        var lbl = c.name + (c.defaultPriceHK ? '（' + c.defaultPriceHK + '）' : '');
-        html += '<option value="' + escAttr(c.id) + '"' + sel + '>' + esc(lbl) + '</option>';
-      });
-      html += '</select>'
+        + Catalog.pickerOptionsHtml(cat, r.name)
+        + '</select>'
         + '<input type="text" class="form-input wp-pend-custom" data-idx="' + i + '" value="' + escAttr(r.name || '') + '" placeholder="輸入新名稱" style="margin-top:4px;display:' + (isCustom ? 'block' : 'none') + '" oninput="WalletPage._wpSetRow(' + i + ',\'name\',this.value)">'
         + '</div>'
         + '<div class="form-group"><label>數量</label><input type="number" min="1" step="1" class="form-input" value="' + (r.qty || 1) + '" oninput="WalletPage._wpSetRow(' + i + ',\'qty\',this.value)"></div>'
@@ -9071,43 +9138,37 @@ var WalletPage = (function() {
     });
     el.innerHTML = html;
   }
-  /** 切換 catalog/自訂：自動帶入品名與預設單價（只覆寫空值，避免抹掉用戶改過的金額） */
+  /** 切換固定票/品項/自訂：自動帶入品名與預設單價（固定票帶設定頁成本價 ourPrice；只覆寫空值） */
   function _wpOnItemChange(i, sel) {
     if (!_wpPendRows[i]) return;
     var v = sel.value;
     var customEl = document.querySelector('.wp-pend-custom[data-idx="' + i + '"]');
-    var payEl = document.querySelector('.wp-pend-row[data-idx="' + i + '"] input[type="number"]:nth-of-type(2)');
-    if (v === '__custom__') {
+    var pick = Catalog.resolvePick(v);
+    if (!pick) {
       if (customEl) customEl.style.display = 'block';
       return;
     }
     if (customEl) customEl.style.display = 'none';
-    var item = Catalog.getById(v);
-    if (!item) return;
-    _wpPendRows[i].name = item.name;
+    _wpPendRows[i].name = pick.name;
     _wpPendRows[i]._payTouched = !!(_wpPendRows[i].pay && _wpPendRows[i].pay !== ''); // 用戶改過就不再覆寫
-    if (!_wpPendRows[i]._payTouched && item.defaultPriceHK > 0) {
-      _wpPendRows[i].pay = String(item.defaultPriceHK);
+    if (!_wpPendRows[i]._payTouched && pick.ourPrice > 0) {
+      _wpPendRows[i].pay = String(pick.ourPrice);
       var inputs = document.querySelectorAll('.wp-pend-row[data-idx="' + i + '"] input[type="number"]');
-      if (inputs.length >= 2) inputs[1].value = item.defaultPriceHK;
+      if (inputs.length >= 2) inputs[1].value = pick.ourPrice;
     }
     // 同步顯示文字輸入（自訂用）的值
-    if (customEl) customEl.value = item.name;
+    if (customEl) customEl.value = pick.name;
     _wpPendRows[i]._payTouched = false; // 重置（避免後續切換又把 pay 視為 touched）
   }
   // 別名以便其它地方復用（MemberPage 預支/帳務開銷會用 _catPickerRow）
   function _catPickerRow(rowIdx, row, onSetRow) {
-    var presetItem = Catalog.findByName(row.name);
-    var cat = presetItem ? presetItem.id : '__custom__';
-    var isCustom = !presetItem;
+    var fixed = Catalog.findFixedByName(row.name);
+    var presetItem = fixed ? null : Catalog.findByName(row.name);
+    var cat = fixed ? fixed.key : (presetItem ? presetItem.id : '__custom__');
+    var isCustom = !fixed && !presetItem;
     var html = '<div class="form-group" style="flex:1 1 220px"><label>品名</label><select class="form-input" data-idx="' + rowIdx + '" onchange="' + onSetRow + '.catChange(' + rowIdx + ',this)">'
-      + '<option value="__custom__"' + (isCustom ? ' selected' : '') + '>＋ 自訂品名…</option>';
-    Catalog.getAll().slice().sort(function(a, b) { return a.name.localeCompare(b.name, 'zh'); }).forEach(function(c) {
-      var sel = (cat === c.id) ? ' selected' : '';
-      var lbl = c.name + (c.defaultPriceHK ? '（' + c.defaultPriceHK + '）' : '');
-      html += '<option value="' + escAttr(c.id) + '"' + sel + '>' + esc(lbl) + '</option>';
-    });
-    html += '</select>'
+      + Catalog.pickerOptionsHtml(cat, row.name)
+      + '</select>'
       + '<input type="text" class="form-input" data-idx="' + rowIdx + '" value="' + escAttr(row.name || '') + '" placeholder="輸入新名稱" style="margin-top:4px;display:' + (isCustom ? 'block' : 'none') + '" oninput="' + onSetRow + '.setRow(' + rowIdx + ',\'name\',this.value)">'
       + '</div>';
     return html;
@@ -9128,7 +9189,15 @@ var WalletPage = (function() {
   function showCatalogManage() {
     var items = Catalog.getAll().slice().sort(function(a, b) { return a.name.localeCompare(b.name, 'zh'); });
     var html = '';
-    html += '<p class="section-desc">管理常用票券／品項（可固定預設單價）。墊付／預支／帳務開銷的下拉選項會讀這裡。預設已預載 10 個常用項目，單價請依貴公司實際售價補上。</p>';
+    // v2.2.3 固定票種區塊（價格由設定頁「門票預設價格」管理，此處唯讀顯示）
+    var fixed = Catalog.fixedTickets();
+    html += '<h4 class="section-subtitle">門票（設定頁價格）</h4>';
+    html += '<table class="data-table" style="width:100%;margin-bottom:12px"><thead><tr><th>名稱</th><th>售價(HK$)</th><th>成本(HK$)</th></tr></thead><tbody>';
+    fixed.forEach(function(t) {
+      html += '<tr><td>' + esc(t.name) + '</td><td>' + fmtHK(t.guestPrice) + '</td><td>' + fmtHK(t.ourPrice) + '</td></tr>';
+    });
+    html += '</tbody></table>';
+    html += '<p class="section-desc" style="margin-bottom:14px">↑ 水舞間／水上樂園價格請至 <b>設定 → 門票預設價格</b> 修改，墊付下拉會即時同步。下方為其他自訂品項（單價在此管理）。</p>';
     if (items.length === 0) html += '<p style="color:#888;text-align:center;padding:20px">目前沒有品項，請新增。</p>';
     else {
       html += '<div style="max-height:50vh;overflow:auto">';
@@ -9157,8 +9226,8 @@ var WalletPage = (function() {
   }
   function showAddCatalogItem() {
     var html = '';
-    html += '<p class="section-desc">新增一個常用品項。儲存後在墊付／預支／帳務開銷下拉可立即選取。</p>';
-    html += '<div class="form-group"><label>品項名稱</label><input type="text" id="cm-name" class="form-input" placeholder="例：水舞間 VIP 席"></div>';
+    html += '<p class="section-desc">新增一個常用品項（水舞間／水上樂園門票請至設定頁管理，勿在此重複建立）。儲存後在墊付／預支／帳務開銷下拉可立即選取。</p>';
+    html += '<div class="form-group"><label>品項名稱</label><input type="text" id="cm-name" class="form-input" placeholder="例：巴黎人 - 巴黎鐵塔"></div>';
     html += '<div class="form-row">';
     html += '<div class="form-group"><label>預設單價 (HK$)</label><input type="number" inputmode="decimal" min="0" step="1" id="cm-price" class="form-input" placeholder="例：988"></div>';
     html += '<div class="form-group"><label>分類</label><select id="cm-cat" class="form-input">' + _catCatOptionsHtml('other') + '</select></div>';
