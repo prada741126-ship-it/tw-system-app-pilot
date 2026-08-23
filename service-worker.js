@@ -6,7 +6,7 @@
  *   - 其他 → stale-while-revalidate
  */
 
-var CACHE_VERSION = 'tw-app-v2.2.1';  /// 2026-08-23 v2.2.1 錢包「＋墊付」=預支開銷入口(選團+會員備忘,存檔即扣,之後帳務逐行細分歸屬);補登移除墊付分類
+var CACHE_VERSION = 'tw-app-v2.2.2';  /// 2026-08-23 v2.2.2 品項主檔:常用門票/餐券可下拉直接選取自動帶預設單價,其餘自訂品名登錄;錢包「品項設定」管理
 var STATIC_CACHE = CACHE_VERSION + '-static';
 var RUNTIME_CACHE = CACHE_VERSION + '-runtime';
 
