@@ -6,7 +6,7 @@
  *   - 其他 → stale-while-revalidate
  */
 
-var CACHE_VERSION = 'tw-app-v2.1.0';  /// 2026-08-23 v2.1 預支開銷:先買先記(錢包即扣)+帳務表單逐行帶入(可細分數量)+純旅遊一鍵轉帳務+團備註名稱+傳帳/封存歸屬守門
+var CACHE_VERSION = 'tw-app-v2.1.1';  /// 2026-08-23 v2.1.1 錢包開帳可編輯/刪除+自動流水「前往修改來源」跳轉
 var STATIC_CACHE = CACHE_VERSION + '-static';
 var RUNTIME_CACHE = CACHE_VERSION + '-runtime';
 
