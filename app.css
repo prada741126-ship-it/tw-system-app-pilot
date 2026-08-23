@@ -2164,3 +2164,36 @@ input, select, textarea { font-size: 16px; }
 .exp-table tr.exp-row-host { background: #fff8e6; }
 .exp-host-cell { background: linear-gradient(90deg, #fde9c8, #fff8e6); padding: 4px 8px; border-radius: 4px; font-weight: 600; color: #b35900; text-align: center; font-size: 12px; }
 .exp-host-badge { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 11px; font-weight: 700; color: #fff; background: #2eaa6b; margin-right: 4px; }
+
+/* ==========================================================================
+   v2.0 港幣現鈔錢包 + 籌碼類型（現金碼/信用碼）
+   ========================================================================== */
+.chip-credit-tag { display: inline-block; padding: 0 5px; border-radius: 8px; font-size: 10px; font-weight: 700; line-height: 1.6; color: #fff; background: #8e44ad; vertical-align: middle; margin-left: 3px; white-space: nowrap; }
+
+.wallet-onboard { max-width: 480px; background: var(--bg-card, #fff); border: 1px solid var(--border, #e0e0e0); border-radius: var(--radius, 10px); padding: 20px 16px; margin: 12px 0; }
+.wallet-balance-card { background: linear-gradient(135deg, #0e4d64, #137a8c); color: #fff; border-radius: 14px; padding: 20px 18px; margin-bottom: 10px; }
+.wallet-balance-card.neg { background: linear-gradient(135deg, #7a1f1f, #a93226); }
+.wallet-balance-label { font-size: 13px; opacity: 0.9; }
+.wallet-balance-num { font-size: 34px; font-weight: 800; letter-spacing: 0.5px; margin-top: 4px; }
+.wallet-balance-warn { font-size: 12px; margin-top: 6px; opacity: 0.95; }
+.wallet-summary { display: flex; gap: 10px; margin-bottom: 12px; }
+.wallet-summary > div { flex: 1; background: var(--bg-card, #fff); border: 1px solid var(--border, #e0e0e0); border-radius: 10px; padding: 8px 10px; font-size: 13px; color: var(--text-secondary, #666); }
+.wallet-summary > div b { color: var(--text-primary, #222); font-size: 13px; }
+.wallet-toolbar { display: flex; justify-content: flex-end; margin-bottom: 4px; }
+.wallet-list { display: flex; flex-direction: column; gap: 8px; }
+.wallet-item { background: var(--bg-card, #fff); border: 1px solid var(--border, #e0e0e0); border-radius: 10px; padding: 10px 12px; cursor: pointer; }
+.wallet-item.open { border-color: var(--primary, #1a73e8); }
+.wallet-item-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.wallet-item-main { display: flex; align-items: center; gap: 8px; min-width: 0; flex-wrap: wrap; }
+.wallet-item-type { display: inline-block; padding: 1px 8px; border-radius: 9px; font-size: 11px; font-weight: 700; color: #fff; background: #5d6d7e; white-space: nowrap; }
+.wallet-item[data-type-open] .wallet-item-type, .wallet-item .wallet-item-type { background: #5d6d7e; }
+.wallet-item-note { font-size: 14px; font-weight: 600; color: var(--text-primary, #222); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 46vw; }
+.wallet-item-amts { display: flex; align-items: baseline; gap: 8px; white-space: nowrap; }
+.wallet-item-amt { font-size: 16px; font-weight: 800; }
+.wallet-item-amt.in { color: #1e8449; }
+.wallet-item-amt.out { color: #c0392b; }
+.wallet-item-run { font-size: 12px; color: var(--text-muted, #999); }
+.wallet-item-sub { font-size: 12px; color: var(--text-muted, #999); margin-top: 3px; }
+.wallet-item-actions { margin-top: 8px; display: flex; gap: 8px; }
+.wallet-detail { margin-top: 8px; padding: 8px 10px; background: var(--bg-main, #f7f8fa); border-radius: 8px; font-size: 13px; color: var(--text-primary, #333); display: flex; flex-direction: column; gap: 3px; }
+.wallet-detail-note { color: var(--text-muted, #888); font-size: 12px; }
