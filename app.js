@@ -70,6 +70,7 @@ var STORAGE_KEYS = {
   MEMBER_TXS:        STORAGE_PREFIX + 'member_txs',
   WALLET_TXS:        STORAGE_PREFIX + 'wallet_txs',
   PENDING_EXPS:      STORAGE_PREFIX + 'pending_exps', // v2.1 預支開銷（先記帳後歸屬）
+  LOANS:             STORAGE_PREFIX + 'loans', // v2.2 港幣借支（借出→回收→未回收追蹤）
   BOOKINGS:          STORAGE_PREFIX + 'bookings',
   SUPPLEMENTS:       STORAGE_PREFIX + 'supplements',
   SETTINGS:          STORAGE_PREFIX + 'settings',
@@ -123,6 +124,7 @@ var FB_PATH = {
   MEMBER_TXS:     FB_DATA_ROOT + '/memberTxs',
   WALLET_TXS:     FB_DATA_ROOT + '/walletTxs', // v2.0 港幣現鈔錢包流水
   PENDING_EXPS:   FB_DATA_ROOT + '/pendingExps', // v2.1 預支開銷（先記帳後歸屬）
+  LOANS:          FB_DATA_ROOT + '/loans', // v2.2 港幣借支
   BOOKINGS:       FB_DATA_ROOT + '/bookings',
   SUPPLEMENTS:    FB_DATA_ROOT + '/supplements',
   ARCHIVES:       FB_DATA_ROOT + '/archives',
@@ -171,6 +173,10 @@ var EVENTS = {
   PEXP_UPDATED:      'pexp:updated',
   PEXP_DELETED:      'pexp:deleted',
   PENDING_EXPS_LOADED: 'pendingExps', // v2.1（與 State key 同名）
+  LOAN_CREATED:      'loan:created', // v2.2 港幣借支
+  LOAN_UPDATED:      'loan:updated',
+  LOAN_DELETED:      'loan:deleted',
+  LOANS_LOADED:      'loans', // v2.2（與 State key 同名）
   BOOKING_CREATED:   'booking:created',
   BOOKING_UPDATED:   'booking:updated',
   BOOKING_DELETED:   'booking:deleted',
@@ -219,6 +225,7 @@ var STATE_EVENTS = {
   memberTxs:     'memberTxs',
   walletTxs:     EVENTS.WALLET_TXS_LOADED,
   pendingExps:   EVENTS.PENDING_EXPS_LOADED, // v2.1 預支開銷
+  loans:         EVENTS.LOANS_LOADED, // v2.2 港幣借支
   bookings:      EVENTS.BOOKINGS_LOADED,
   supplements:   'supplements',
   settings:      EVENTS.SETTINGS_LOADED,
@@ -557,6 +564,7 @@ var State = (function() {
     memberTxs: [],
     walletTxs: [], // v2.0 港幣現鈔錢包流水
     pendingExps: [], // v2.1 預支開銷
+    loans: [], // v2.2 港幣借支
     bookings: [],
     supplements: [],
     settings: null,
@@ -722,6 +730,10 @@ var Schema = (function() {
     pendingExps: { // v2.1 預支開銷（先記帳後歸屬）
       id: 's!', tripId: 's!', date: 'd', note: 's',
       agentId: 's', shareholderId: 's', rows: 'a',
+    },
+    loans: { // v2.2 港幣借支（純現金借貸，不與帳務回碼/上下分抵銷）
+      id: 's!', memberId: 's', date: 'd', note: 's',
+      amountHKD: 'n', repayments: 'a', // repayments: [{ date, amountHKD, note }]
     },
     bookings: {
       id: 's!', tripId: 's', memberId: 's', guestName: 's',
@@ -945,6 +957,7 @@ var Perm = (function() {
     memberTxs:     ['member', 'membersMgmt'],
     walletTxs:     ['wallet'], // v2.0 港幣現鈔錢包
     pendingExps:   ['member'], // v2.1 預支開銷（帳務頁操作，隨帳務權限）
+    loans:         ['wallet'], // v2.2 港幣借支（錢包頁操作）
     trips:         ['member', 'pending'],
     supplements:   ['fees', 'member'],
     bookings:      ['room', 'pending'],
@@ -2915,6 +2928,7 @@ function _setupWatchers() {
     { key: 'MEMBER_TXS',    storeKey: STORAGE_KEYS.MEMBER_TXS,    event: EVENTS.MTX_LOADED,           stateKey: 'memberTxs' },
     { key: 'WALLET_TXS',    storeKey: STORAGE_KEYS.WALLET_TXS,    event: EVENTS.WALLET_TXS_LOADED,    stateKey: 'walletTxs' },
     { key: 'PENDING_EXPS',   storeKey: STORAGE_KEYS.PENDING_EXPS,   event: EVENTS.PENDING_EXPS_LOADED,  stateKey: 'pendingExps' }, // v2.1 預支開銷
+    { key: 'LOANS',          storeKey: STORAGE_KEYS.LOANS,          event: EVENTS.LOANS_LOADED,         stateKey: 'loans' }, // v2.2 港幣借支
     { key: 'BOOKINGS',      storeKey: STORAGE_KEYS.BOOKINGS,      event: EVENTS.BOOKINGS_LOADED,      stateKey: 'bookings' },
     { key: 'SUPPLEMENTS',   storeKey: STORAGE_KEYS.SUPPLEMENTS,   event: EVENTS.SYNC_COMPLETE,        stateKey: 'supplements' },
     { key: 'SETTINGS',      storeKey: STORAGE_KEYS.SETTINGS,      event: EVENTS.SETTINGS_LOADED,      stateKey: 'settings' },
@@ -3019,7 +3033,7 @@ function _setupWatchers() {
 function _resyncAll() {
   var syncPaths = [
     FB_PATH.MEMBERS, FB_PATH.AGENTS, FB_PATH.SHAREHOLDERS,
-    FB_PATH.TRIPS, FB_PATH.MEMBER_TXS, FB_PATH.WALLET_TXS, FB_PATH.PENDING_EXPS, FB_PATH.BOOKINGS,
+    FB_PATH.TRIPS, FB_PATH.MEMBER_TXS, FB_PATH.WALLET_TXS, FB_PATH.PENDING_EXPS, FB_PATH.LOANS, FB_PATH.BOOKINGS,
     FB_PATH.SUPPLEMENTS, FB_PATH.SETTINGS, FB_PATH.EXTRA_INCOME,
     FB_PATH.HOTEL_CONFIG, FB_PATH.USERS,
     FB_PATH.AUDIT_LOG,
@@ -3032,6 +3046,7 @@ function _resyncAll() {
   storeMap[FB_PATH.MEMBER_TXS]    = { storeKey: STORAGE_KEYS.MEMBER_TXS,    event: EVENTS.MTX_LOADED,           stateKey: 'memberTxs' };
   storeMap[FB_PATH.WALLET_TXS]    = { storeKey: STORAGE_KEYS.WALLET_TXS,    event: EVENTS.WALLET_TXS_LOADED,    stateKey: 'walletTxs' }; // v2.0 錢包
   storeMap[FB_PATH.PENDING_EXPS]  = { storeKey: STORAGE_KEYS.PENDING_EXPS,  event: EVENTS.PENDING_EXPS_LOADED,  stateKey: 'pendingExps' }; // v2.1 預支開銷
+  storeMap[FB_PATH.LOANS]         = { storeKey: STORAGE_KEYS.LOANS,         event: EVENTS.LOANS_LOADED,         stateKey: 'loans' }; // v2.2 港幣借支
   storeMap[FB_PATH.BOOKINGS]      = { storeKey: STORAGE_KEYS.BOOKINGS,      event: EVENTS.BOOKINGS_LOADED,      stateKey: 'bookings' };
   storeMap[FB_PATH.SUPPLEMENTS]   = { storeKey: STORAGE_KEYS.SUPPLEMENTS,   event: EVENTS.SYNC_COMPLETE,        stateKey: 'supplements' };
   storeMap[FB_PATH.SETTINGS]      = { storeKey: STORAGE_KEYS.SETTINGS,      event: EVENTS.SETTINGS_LOADED,      stateKey: 'settings' };
@@ -3711,6 +3726,63 @@ var Wallet = (function() {
     _removeById('wtx_pexp_' + pendId);
   }
 
+  // —— v2.2 港幣借支 → 錢包：借出扣款一條、回收加回一條（聚合）——
+  function syncForLoan(l) {
+    if (!l) return;
+    if (l._deleted) { removeForLoan(l.id); return; }
+    var m = (typeof Members !== 'undefined') ? Members.getById(l.memberId) : null;
+    var label = m ? (m.id + ' ' + (m.name || '')) : (l.memberId || '');
+    var amt = Math.round(l.amountHKD || 0);
+    var outId = 'wtx_loan_' + l.id;
+    if (amt > 0) {
+      _upsert({
+        id: outId,
+        type: 'loan',
+        refId: l.id, memberId: l.memberId,
+        amountHKD: -amt, date: l.date,
+        note: label + ' 借支',
+        detail: { note: l.note || '' },
+      });
+    } else {
+      _removeById(outId);
+    }
+    var reps = l.repayments || [];
+    var repTotal = reps.reduce(function(s, r) { return s + (r.amountHKD || 0); }, 0);
+    var inId = 'wtx_loanr_' + l.id;
+    if (repTotal > 0) {
+      var lastDate = reps.length ? reps[reps.length - 1].date : l.date;
+      _upsert({
+        id: inId,
+        type: 'loan_repay',
+        refId: l.id, memberId: l.memberId,
+        amountHKD: Math.round(repTotal), date: lastDate,
+        note: label + ' 借支回收',
+        detail: { items: reps.map(function(r) { return { date: r.date, amountHK: r.amountHKD || 0, note: r.note || '' }; }) },
+      });
+    } else {
+      _removeById(inId);
+    }
+  }
+  function removeForLoan(loanId) {
+    if (!loanId) return;
+    _removeById('wtx_loan_' + loanId);
+    _removeById('wtx_loanr_' + loanId);
+  }
+  /** v2.2 借支流水對帳：LOANS_LOADED 後重算所有借支流水＋清孤兒 */
+  function reconcileLoans() {
+    if (typeof Loans === 'undefined') return;
+    var alive = {};
+    Loans.getAll().forEach(function(l) {
+      alive[l.id] = true;
+      syncForLoan(l);
+    });
+    (State.get('walletTxs') || []).forEach(function(w) {
+      if (w._deleted) return;
+      if (w.type !== 'loan' && w.type !== 'loan_repay') return;
+      if (w.refId && !alive[w.refId]) _removeById(w.id);
+    });
+  }
+
   function removeForTx(txId) {
     if (!txId) return;
     _removeById('wtx_' + txId);
@@ -3733,6 +3805,7 @@ var Wallet = (function() {
       if (w.refId && !alive[w.refId]) _removeById(w.id);
     });
     reconcilePends();
+    reconcileLoans(); // v2.2 借支
   }
 
   /** v2.1 預支流水對帳：PENDING_EXPS_LOADED 後重算所有預支流水＋清孤兒 */
@@ -3832,6 +3905,7 @@ var Wallet = (function() {
     chipNetHKD: chipNetHKD, expensePayoutHKD: expensePayoutHKD,
     syncForTx: syncForTx, removeForTx: removeForTx, reconcileAll: reconcileAll,
     syncForPend: syncForPend, removeForPend: removeForPend, reconcilePends: reconcilePends, pendPayoutHKD: pendPayoutHKD,
+    syncForLoan: syncForLoan, removeForLoan: removeForLoan, reconcileLoans: reconcileLoans,
     isOpened: isOpened, openAccount: openAccount,
     addManual: addManual, updateManual: updateManual, removeManual: removeManual,
     updateOpen: updateOpen, removeOpen: removeOpen,
@@ -3993,6 +4067,138 @@ var PendExps = (function() {
       });
     },
     create: create, update: update, remove: remove,
+  };
+})();
+
+
+// === src/data/loans.js ===
+/**
+ * data/loans.js — v2.2 港幣借支（純現金借貸，不與帳務回碼/上下分抵銷）
+ * 借出即扣錢包；部分/全額回收逐筆記錄；未回收隨時計算（outstanding）
+ * 依赖: core/constants.js, core/schema.js, core/events.js, core/state.js, core/store.js, sync/uploader.js
+ */
+var Loans = (function() {
+  function load() {
+    var arr = Store.readArray(STORAGE_KEYS.LOANS);
+    State.set('loans', arr);
+    return arr;
+  }
+  function save(arr) {
+    Store.writeArray(STORAGE_KEYS.LOANS, arr);
+    State.set('loans', arr);
+  }
+  function getAll() {
+    return (State.get('loans') || []).filter(function(l) { return !l._deleted; });
+  }
+  function getById(id) {
+    return getAll().find(function(l) { return l.id === id; });
+  }
+  function getByMember(memberId) {
+    return getAll().filter(function(l) { return l.memberId === memberId; });
+  }
+
+  function repaidTotal(l) {
+    return (l.repayments || []).reduce(function(s, r) { return s + (r.amountHKD || 0); }, 0);
+  }
+  function outstanding(l) {
+    return Math.max(0, Math.round((l.amountHKD || 0) - repaidTotal(l)));
+  }
+  function openLoans() {
+    return getAll().filter(function(l) { return outstanding(l) > 0; });
+  }
+  function openTotalByMember(memberId) {
+    return getByMember(memberId).reduce(function(s, l) { return s + outstanding(l); }, 0);
+  }
+
+  function create(data) {
+    var now = Date.now();
+    var amount = Math.round(data.amountHKD || 0);
+    if (!data.memberId || amount <= 0) return null;
+    var l = {
+      id: 'LN' + now,
+      memberId: data.memberId,
+      date: data.date || TWDate.todayStr(),
+      note: data.note || '',
+      amountHKD: amount,
+      repayments: [],
+      createdAt: now,
+      _fbKey: 'LN' + now,
+      _updatedAt: now,
+    };
+    if (!Schema.sanitize('loans', l)) return null;
+    var arr = State.get('loans') || [];
+    arr.push(l);
+    save(arr);
+    var obj = {}; obj[l._fbKey] = l;
+    enqueue(FB_PATH.LOANS, obj);
+    EventBus.emit(EVENTS.LOAN_CREATED, l);
+    return l;
+  }
+  function update(id, patch) {
+    var arr = State.get('loans') || [];
+    var idx = arr.findIndex(function(l) { return l.id === id; });
+    if (idx < 0) return null;
+    var merged = Object.assign({}, arr[idx], patch);
+    // 守門：借出金額不可低於已回收總額
+    if (Math.round(merged.amountHKD || 0) < repaidTotal(arr[idx])) return null;
+    merged.amountHKD = Math.round(merged.amountHKD || 0);
+    if (!Schema.sanitize('loans', merged)) return null;
+    Object.assign(arr[idx], merged, { _updatedAt: Date.now() });
+    save(arr);
+    var obj = {}; obj[arr[idx]._fbKey] = arr[idx];
+    enqueue(FB_PATH.LOANS, obj);
+    EventBus.emit(EVENTS.LOAN_UPDATED, arr[idx]);
+    return arr[idx];
+  }
+  /** 部分回收：金額自動夾在 1~尚欠 */
+  function repay(id, amountHKD, date, note) {
+    var arr = State.get('loans') || [];
+    var idx = arr.findIndex(function(l) { return l.id === id; });
+    if (idx < 0) return null;
+    var l = arr[idx];
+    var amt = Math.round(amountHKD || 0);
+    var max = outstanding(l);
+    if (amt <= 0) return null;
+    if (amt > max) amt = max;
+    l.repayments = (l.repayments || []).concat([{ date: date || TWDate.todayStr(), amountHKD: amt, note: note || '' }]);
+    l._updatedAt = Date.now();
+    save(arr);
+    var obj = {}; obj[l._fbKey] = l;
+    enqueue(FB_PATH.LOANS, obj);
+    EventBus.emit(EVENTS.LOAN_UPDATED, l);
+    return l;
+  }
+  /** 刪單筆回收（key 錯修正用） */
+  function removeRepayment(id, idx) {
+    var arr = State.get('loans') || [];
+    var i = arr.findIndex(function(l) { return l.id === id; });
+    if (i < 0) return null;
+    var l = arr[i];
+    if (!l.repayments || idx < 0 || idx >= l.repayments.length) return null;
+    l.repayments.splice(idx, 1);
+    l._updatedAt = Date.now();
+    save(arr);
+    var obj = {}; obj[l._fbKey] = l;
+    enqueue(FB_PATH.LOANS, obj);
+    EventBus.emit(EVENTS.LOAN_UPDATED, l);
+    return l;
+  }
+  function remove(id) {
+    var arr = State.get('loans') || [];
+    var idx = arr.findIndex(function(l) { return l.id === id; });
+    if (idx < 0) return;
+    arr[idx]._deleted = true;
+    arr[idx]._updatedAt = Date.now();
+    save(arr);
+    var obj = {}; obj[arr[idx]._fbKey] = arr[idx];
+    enqueue(FB_PATH.LOANS, obj);
+    EventBus.emit(EVENTS.LOAN_DELETED, id);
+  }
+
+  return {
+    load: load, save: save, getAll: getAll, getById: getById, getByMember: getByMember,
+    repaidTotal: repaidTotal, outstanding: outstanding, openLoans: openLoans, openTotalByMember: openTotalByMember,
+    create: create, update: update, repay: repay, removeRepayment: removeRepayment, remove: remove,
   };
 })();
 
@@ -8270,6 +8476,8 @@ var WalletPage = (function() {
       case 'credit_tx': return '信用碼超贏';
       case 'expense': return '開銷實支';
       case 'pexp': return '預支開銷'; // v2.1
+      case 'loan': return '借支'; // v2.2
+      case 'loan_repay': return '借支回收'; // v2.2
       case 'manual': return '補登·' + _catLabel(w.category);
       default: return w.type || '';
     }
@@ -8353,8 +8561,9 @@ var WalletPage = (function() {
     html += '<div><b>流水</b><br>' + entries.length + ' 筆</div>';
     html += '</div>';
 
-    html += '<div class="wallet-toolbar"><button class="btn btn-primary" onclick="WalletPage.showAddManual()">＋ 補登</button></div>';
-    html += '<p class="section-desc">只記實際掏出/收回的港幣現鈔；交收回款走結算系統不進錢包。點列可展開明細與編輯／刪除（自動流水不可直接改，請點「前往修改來源」改原單，錢包會自動更新）。</p>';
+    html += '<div class="wallet-toolbar"><button class="btn btn-primary" onclick="WalletPage.showAddManual()">＋ 補登</button> <button class="btn" onclick="WalletPage.showAddLoan()">＋ 借支</button></div>';
+    html += _loansPanelHtml(); // v2.2 未回收借支清單（常駐警示）
+    html += '<p class="section-desc">只記實際掏出/收回的港幣現鈔；交收回款走結算系統不進錢包。點列可展開明細與編輯／刪除（自動流水不可直接改，請點「前往修改來源」改原單，錢包會自動更新）。借支是純現金借貸，不與帳務回碼／上下分抵銷。</p>';
 
     var list = entries.slice().reverse();
     if (list.length === 0) {
@@ -8395,6 +8604,23 @@ var WalletPage = (function() {
             + '<button class="btn-sm" onclick="event.stopPropagation();WalletPage.gotoPend(\'' + escJs(w.id) + '\')">前往預支開銷</button>'
             + '</div>';
         }
+        if (isOpen && w.type === 'loan') { // v2.2 借支：回收/編輯/刪除
+          html += '<div class="wallet-item-actions">'
+            + '<button class="btn-sm" onclick="event.stopPropagation();WalletPage.repayLoan(\'' + escJs(w.refId || '') + '\')">登記回收</button> '
+            + '<button class="btn-sm" onclick="event.stopPropagation();WalletPage.showEditLoan(\'' + escJs(w.refId || '') + '\')">編輯</button> '
+            + '<button class="btn-sm btn-danger" onclick="event.stopPropagation();WalletPage.delLoan(\'' + escJs(w.refId || '') + '\')">刪除</button>'
+            + '</div>';
+        }
+        if (isOpen && w.type === 'loan_repay') { // v2.2 回收流水：逐筆刪回收（key 錯修正）
+          var _lr = (typeof Loans !== 'undefined' && w.refId) ? Loans.getById(w.refId) : null;
+          if (_lr && _lr.repayments && _lr.repayments.length) {
+            html += '<div class="wallet-item-actions">';
+            _lr.repayments.forEach(function(r, ri) {
+              html += '<button class="btn-sm btn-danger" onclick="event.stopPropagation();WalletPage.delRepay(\'' + escJs(w.refId) + '\',' + ri + ')">刪 ' + esc((r.date || '')) + ' 收款</button> ';
+            });
+            html += '</div>';
+          }
+        }
         html += '</div>';
       });
       html += '</div>';
@@ -8405,6 +8631,152 @@ var WalletPage = (function() {
   function toggleDetail(id) {
     _expanded[id] = !_expanded[id];
     render();
+  }
+
+  // ===== v2.2 港幣借支：登記 / 未回收清單 / 部分回收 =====
+  function _memberOptions(sel) {
+    var html = '';
+    var ms = (typeof Members !== 'undefined') ? Members.getAll() : [];
+    ms.forEach(function(m) {
+      html += '<option value="' + esc(m.id) + '"' + (m.id === sel ? ' selected' : '') + '>' + esc(m.id + (m.name ? ' ' + m.name : '')) + '</option>';
+    });
+    return html;
+  }
+  function _memberLabel(id) {
+    var m = (typeof Members !== 'undefined') ? Members.getById(id) : null;
+    return m ? (m.id + (m.name ? ' ' + m.name : '')) : (id || '');
+  }
+  function _loansPanelHtml() {
+    if (typeof Loans === 'undefined') return '';
+    var opens = Loans.openLoans();
+    if (!opens.length) return '';
+    var totalOut = opens.reduce(function(s, l) { return s + Loans.outstanding(l); }, 0);
+    var todayMs = new Date(TWDate.todayStr() + 'T00:00:00').getTime();
+    var html = '<div class="loan-panel">';
+    html += '<div class="loan-panel-head">未回收借支 <b class="loan-panel-total">HK$ ' + fmtHK(totalOut) + '</b><span class="loan-panel-count">' + opens.length + ' 筆</span></div>';
+    opens.forEach(function(l) {
+      var out = Loans.outstanding(l);
+      var repaid = Loans.repaidTotal(l);
+      var days = Math.max(0, Math.round((todayMs - new Date(l.date + 'T00:00:00').getTime()) / 86400000));
+      html += '<div class="loan-item">';
+      html += '<div class="loan-item-row"><span class="loan-item-member">' + esc(_memberLabel(l.memberId)) + '</span>'
+        + '<span class="loan-item-date">' + esc(l.date || '') + '（' + days + ' 天）</span>'
+        + '<span class="loan-item-out">尚欠 <b>HK$ ' + fmtHK(out) + '</b></span></div>';
+      html += '<div class="loan-item-sub">借出 HK$ ' + fmtHK(l.amountHKD || 0) + (repaid > 0 ? ' · 已收 HK$ ' + fmtHK(repaid) : '') + (l.note ? ' · ' + esc(l.note) : '') + '</div>';
+      if (l.repayments && l.repayments.length) {
+        html += '<div class="loan-item-reps">';
+        l.repayments.forEach(function(r, ri) {
+          html += '<span class="loan-rep-chip">' + esc(r.date || '') + ' 收 HK$ ' + fmtHK(r.amountHKD || 0) + (r.note ? ' ' + esc(r.note) : '')
+            + ' <a href="javascript:void(0)" onclick="WalletPage.delRepay(\'' + escJs(l.id) + '\',' + ri + ')">✕</a></span>';
+        });
+        html += '</div>';
+      }
+      html += '<div class="loan-item-actions">'
+        + '<button class="btn-sm" onclick="WalletPage.repayLoan(\'' + escJs(l.id) + '\')">回收</button> '
+        + '<button class="btn-sm" onclick="WalletPage.showEditLoan(\'' + escJs(l.id) + '\')">編輯</button> '
+        + '<button class="btn-sm btn-danger" onclick="WalletPage.delLoan(\'' + escJs(l.id) + '\')">刪除</button>'
+        + '</div>';
+      html += '</div>';
+    });
+    html += '</div>';
+    return html;
+  }
+  function showAddLoan() {
+    var html = '';
+    html += '<div class="form-row">';
+    html += '<div class="form-group"><label>會員</label><select id="wl-member" class="form-input">' + _memberOptions('') + '</select></div>';
+    html += '<div class="form-group"><label>金額(HK$)</label><input type="number" inputmode="decimal" step="1" min="1" id="wl-amt" class="form-input" placeholder="例：30000"></div>';
+    html += '</div>';
+    html += '<div class="form-row">';
+    html += '<div class="form-group"><label>日期</label><input type="date" id="wl-date" class="form-input" value="' + TWDate.todayStr() + '"></div>';
+    html += '<div class="form-group"><label>備註</label><input type="text" id="wl-note" class="form-input" placeholder="例：飯店雜費預借"></div>';
+    html += '</div>';
+    html += '<p class="section-desc">借支＝現鈔借給會員，存檔當下錢包即扣；還款時用「回收」登記（可部分還）。借支不可與帳務回碼／上下分抵銷。</p>';
+    html += '<div class="row-actions"><button class="btn btn-primary" onclick="WalletPage.saveLoan()">儲存</button></div>';
+    Modal.open('借支登記', html);
+  }
+  function saveLoan() {
+    var memberEl = document.getElementById('wl-member');
+    var amtEl = document.getElementById('wl-amt');
+    var amt = amtEl ? parseFloat(amtEl.value) : NaN;
+    var date = (document.getElementById('wl-date') || {}).value || TWDate.todayStr();
+    var note = (document.getElementById('wl-note') || {}).value || '';
+    if (!memberEl || !memberEl.value) { Toast.error('請選擇會員'); return; }
+    if (isNaN(amt) || amt <= 0) { Toast.error('請輸入正確金額'); return; }
+    var l = Loans.create({ memberId: memberEl.value, amountHKD: amt, date: date, note: note });
+    if (l) { Modal.close(); Toast.success('借支已登記，錢包已扣 HK$ ' + fmtHK(amt)); render(); }
+    else Toast.error('儲存失敗');
+  }
+  function repayLoan(id) {
+    var l = Loans.getById(id);
+    if (!l) return;
+    var out = Loans.outstanding(l);
+    var html = '';
+    html += '<p class="section-desc">' + esc(_memberLabel(l.memberId)) + ' 借出 HK$ ' + fmtHK(l.amountHKD || 0) + '，已收 HK$ ' + fmtHK(Loans.repaidTotal(l)) + '，<b>尚欠 HK$ ' + fmtHK(out) + '</b></p>';
+    html += '<div class="form-row">';
+    html += '<div class="form-group"><label>本次回收(HK$)</label><input type="number" inputmode="decimal" step="1" min="1" max="' + out + '" id="wr-amt" class="form-input" value="' + out + '"></div>';
+    html += '<div class="form-group"><label>日期</label><input type="date" id="wr-date" class="form-input" value="' + TWDate.todayStr() + '"></div>';
+    html += '</div>';
+    html += '<div class="form-group"><label>備註</label><input type="text" id="wr-note" class="form-input" placeholder="例：部分回收"></div>';
+    html += '<div class="row-actions"><button class="btn btn-primary" onclick="WalletPage.saveRepay(\'' + escJs(id) + '\')">儲存</button></div>';
+    Modal.open('借支回收', html);
+  }
+  function saveRepay(id) {
+    var amtEl = document.getElementById('wr-amt');
+    var amt = amtEl ? parseFloat(amtEl.value) : NaN;
+    var date = (document.getElementById('wr-date') || {}).value || TWDate.todayStr();
+    var note = (document.getElementById('wr-note') || {}).value || '';
+    if (isNaN(amt) || amt <= 0) { Toast.error('請輸入正確金額'); return; }
+    var l = Loans.repay(id, amt, date, note);
+    if (l) {
+      Modal.close();
+      var out = Loans.outstanding(l);
+      Toast.success(out > 0 ? '已回收 HK$ ' + fmtHK(amt) + '，尚欠 HK$ ' + fmtHK(out) : '已全額回收');
+      render();
+    } else Toast.error('儲存失敗');
+  }
+  function showEditLoan(id) {
+    var l = Loans.getById(id);
+    if (!l) return;
+    var html = '';
+    html += '<div class="form-row">';
+    html += '<div class="form-group"><label>會員</label><select id="wle-member" class="form-input">' + _memberOptions(l.memberId) + '</select></div>';
+    html += '<div class="form-group"><label>金額(HK$)</label><input type="number" inputmode="decimal" step="1" min="1" id="wle-amt" class="form-input" value="' + (l.amountHKD || 0) + '"></div>';
+    html += '</div>';
+    html += '<div class="form-row">';
+    html += '<div class="form-group"><label>日期</label><input type="date" id="wle-date" class="form-input" value="' + (l.date || '') + '"></div>';
+    html += '<div class="form-group"><label>備註</label><input type="text" id="wle-note" class="form-input" value="' + esc(l.note || '') + '"></div>';
+    html += '</div>';
+    if (Loans.repaidTotal(l) > 0) html += '<p class="section-desc">已回收 HK$ ' + fmtHK(Loans.repaidTotal(l)) + '，金額不可低於已回收總額。</p>';
+    html += '<div class="row-actions"><button class="btn btn-primary" onclick="WalletPage.saveEditLoan(\'' + escJs(id) + '\')">儲存</button></div>';
+    Modal.open('編輯借支', html);
+  }
+  function saveEditLoan(id) {
+    var memberEl = document.getElementById('wle-member');
+    var amtEl = document.getElementById('wle-amt');
+    var amt = amtEl ? parseFloat(amtEl.value) : NaN;
+    var date = (document.getElementById('wle-date') || {}).value || TWDate.todayStr();
+    var note = (document.getElementById('wle-note') || {}).value || '';
+    if (!memberEl || !memberEl.value) { Toast.error('請選擇會員'); return; }
+    if (isNaN(amt) || amt <= 0) { Toast.error('請輸入正確金額'); return; }
+    var l = Loans.update(id, { memberId: memberEl.value, amountHKD: amt, date: date, note: note });
+    if (l) { Modal.close(); Toast.success('已更新，錢包已同步'); render(); }
+    else Toast.error('更新失敗（金額不可低於已回收總額）');
+  }
+  function delLoan(id) {
+    var l = Loans.getById(id);
+    if (!l) return;
+    Modal.confirm('確定刪除這筆借支？（借出與已回收的錢包流水會一併移除）', function() {
+      Loans.remove(id);
+      Toast.success('已刪除');
+      render();
+    });
+  }
+  function delRepay(loanId, idx) {
+    Modal.confirm('確定刪除這筆回收記錄？（錢包回收金額會同步減少）', function() {
+      if (Loans.removeRepayment(loanId, idx)) { Toast.success('已刪除'); render(); }
+      else Toast.error('刪除失敗');
+    });
   }
 
   function saveOpen() {
@@ -8564,6 +8936,8 @@ var WalletPage = (function() {
     saveOpen: saveOpen,
     showAddManual: showAddManual, saveManual: saveManual,
     showEditManual: showEditManual, saveEditManual: saveEditManual, delManual: delManual,
+    showAddLoan: showAddLoan, saveLoan: saveLoan, repayLoan: repayLoan, saveRepay: saveRepay,
+    showEditLoan: showEditLoan, saveEditLoan: saveEditLoan, delLoan: delLoan, delRepay: delRepay,
     showEditOpen: showEditOpen, saveEditOpen: saveEditOpen, delOpen: delOpen, // v2.1.1
     gotoSource: gotoSource, gotoPend: gotoPend, // v2.1.1
   };
@@ -13193,6 +13567,7 @@ function loadAllData() {
   MemberTxs.load();
   Wallet.load(); // v2.0 港幣現鈔錢包
   PendExps.load(); // v2.1 預支開銷
+  Loans.load(); // v2.2 港幣借支
   Bookings.load();
   Supplements.load();
   Settings.load();
@@ -13297,6 +13672,12 @@ function initApp() {
   EventBus.on(EVENTS.PEXP_DELETED, function(id) { try { Wallet.removeForPend(id); } catch (e) { console.error('[Wallet] removeForPend', e); } });
   EventBus.on(EVENTS.PENDING_EXPS_LOADED, function() { try { Wallet.reconcilePends(); } catch (e) { console.error('[Wallet] reconcilePends', e); } });
 
+  // 2d. v2.2 港幣借支：借出/回收/編輯當下同步錢包（冪等）；遠端合併後全量對帳
+  EventBus.on(EVENTS.LOAN_CREATED, function(l) { try { Wallet.syncForLoan(l); } catch (e) { console.error('[Wallet] syncForLoan', e); } });
+  EventBus.on(EVENTS.LOAN_UPDATED, function(l) { try { Wallet.syncForLoan(l); } catch (e) { console.error('[Wallet] syncForLoan', e); } });
+  EventBus.on(EVENTS.LOAN_DELETED, function(id) { try { Wallet.removeForLoan(id); } catch (e) { console.error('[Wallet] removeForLoan', e); } });
+  EventBus.on(EVENTS.LOANS_LOADED, function() { try { Wallet.reconcileLoans(); } catch (e) { console.error('[Wallet] reconcileLoans', e); } });
+
   // 3. 键盘快捷键
   Keyboard.init();
 
@@ -13318,6 +13699,7 @@ function initApp() {
         MEMBER_TXS: State.get('memberTxs'),
         WALLET_TXS: State.get('walletTxs'),
         PENDING_EXPS: State.get('pendingExps'),
+        LOANS: State.get('loans'),
         BOOKINGS: State.get('bookings'),
         SUPPLEMENTS: State.get('supplements'),
         SETTINGS: State.get('settings'),
