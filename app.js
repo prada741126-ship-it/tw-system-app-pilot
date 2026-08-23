@@ -730,6 +730,7 @@ var Schema = (function() {
     pendingExps: { // v2.1 預支開銷（先記帳後歸屬）
       id: 's!', tripId: 's!', date: 'd', note: 's',
       agentId: 's', shareholderId: 's', rows: 'a',
+      memberId: 's', // v2.2.1 備註會員（純顯示，帶入帳務時仍可細分給任何人）
     },
     loans: { // v2.2 港幣借支（純現金借貸，不與帳務回碼/上下分抵銷）
       id: 's!', memberId: 's', date: 'd', note: 's',
@@ -4002,6 +4003,7 @@ var PendExps = (function() {
       tripId: data.tripId || '',
       agentId: data.agentId || '',
       shareholderId: data.shareholderId || '',
+      memberId: data.memberId || '', // v2.2.1 備註會員
       date: data.date || TWDate.todayStr(),
       note: data.note || '',
       rows: (data.rows || []).map(function(r, i) {
@@ -8172,6 +8174,7 @@ var MemberPage = (function() {
       html += '<div class="pend-card-head">';
       html += '<span class="pend-date">' + esc(p.date || '') + '</span>';
       if (p.note) html += '<span class="pend-note">' + esc(p.note) + '</span>';
+      if (p.memberId) { var _m = Members.getById(p.memberId); html += '<span class="pend-note">給 ' + esc(_m ? _m.id + (_m.name ? ' ' + _m.name : '') : p.memberId) + '</span>'; }
       html += '<span class="pend-state ' + (remaining > 0 ? 'pend-state-open' : 'pend-state-done') + '">' + (remaining > 0 ? remaining + ' 項待歸屬' : '已全數歸屬') + '</span>';
       html += '<span class="pend-pay">實支 ' + fmtCardNum(payTotal) + ' HK</span>';
       html += '</div>';
@@ -8200,6 +8203,16 @@ var MemberPage = (function() {
     return html;
   }
 
+  function _pendMemberOptionsHtml(trip, selected) {
+    var ids = (trip && trip.memberIds && trip.memberIds.length) ? trip.memberIds : null;
+    var list = ids ? Members.getAll().filter(function(m) { return ids.indexOf(m.id) >= 0; })
+                   : Members.getAll();
+    var html = '<option value="">（不指定／之後再分）</option>';
+    list.forEach(function(m) {
+      html += '<option value="' + escAttr(m.id) + '"' + (selected === m.id ? ' selected' : '') + '>' + esc(m.id + (m.name ? ' ' + m.name : '')) + '</option>';
+    });
+    return html;
+  }
   function showAddPend() {
     var trip = Trips.getById(_selectedTrip);
     if (!trip) { Toast.error('請先選擇團'); return; }
@@ -8211,6 +8224,7 @@ var MemberPage = (function() {
     html += '<div class="form-group"><label>日期</label><input type="date" id="pend-date" class="form-input" value="' + TWDate.todayStr() + '"></div>';
     html += '<div class="form-group"><label>備註（選填）</label><input type="text" id="pend-note" class="form-input" placeholder="例：猴哥團東哥購票"></div>';
     html += '</div>';
+    html += '<div class="form-group"><label>會員（備註用，選填——帶入帳務時仍可細分給任何人）</label><select id="pend-member" class="form-input">' + _pendMemberOptionsHtml(trip, '') + '</select></div>';
     html += '<div id="pend-exp-rows"></div>';
     html += '<button class="btn-sm" onclick="MemberPage.addExpenseRow()">+ 開銷</button>';
     html += '<div class="row-actions">';
@@ -8232,6 +8246,7 @@ var MemberPage = (function() {
       tripId: _selectedTrip,
       agentId: trip ? (trip.agentId || '') : '',
       shareholderId: trip ? (trip.shareholderId || '') : '',
+      memberId: (document.getElementById('pend-member') || {}).value || '', // v2.2.1 備註會員
       date: dateEl ? dateEl.value : TWDate.todayStr(),
       note: noteEl ? (noteEl.value || '').trim() : '',
       rows: rows.map(function(e) {
@@ -8264,6 +8279,7 @@ var MemberPage = (function() {
     html += '<div class="form-group"><label>日期</label><input type="date" id="pend-date" class="form-input" value="' + (p.date || TWDate.todayStr()) + '"></div>';
     html += '<div class="form-group"><label>備註（選填）</label><input type="text" id="pend-note" class="form-input" value="' + escAttr(p.note || '') + '"></div>';
     html += '</div>';
+    html += '<div class="form-group"><label>會員（備註用，選填）</label><select id="pend-member" class="form-input">' + _pendMemberOptionsHtml(Trips.getById(p.tripId), p.memberId || '') + '</select></div>';
     html += '<div id="pend-exp-rows"></div>';
     html += '<button class="btn-sm" onclick="MemberPage.addExpenseRow()">+ 開銷</button>';
     html += '<div class="row-actions">';
@@ -8358,7 +8374,7 @@ var MemberPage = (function() {
       var unitPay = (r.payout !== undefined && r.payout !== null) ? (r.payout / (r.quantity || 1)) : ((r.ourPrice !== undefined && r.ourPrice !== null) ? r.ourPrice : (r.amountHK || 0) / (r.quantity || 1));
       html += '<div class="pendpool-item">'
         + '<span class="pendpool-name">' + esc(r.name || '(未命名)') + (r.absorbed ? ' <span class="tx-absorb-tag">吸收</span>' : '') + '</span>'
-        + '<span class="pendpool-info">實支 ' + fmtCardNum(Math.round(unitPay * 100) / 100) + ' HK/單位 · 剩餘 ' + x.remaining + '</span>'
+        + '<span class="pendpool-info">實支 ' + fmtCardNum(Math.round(unitPay * 100) / 100) + ' HK/單位 · 剩餘 ' + x.remaining + (x.pend.memberId ? ' · 原備註：給 ' + esc((function(mm) { return mm ? mm.id + (mm.name ? ' ' + mm.name : '') : x.pend.memberId; })(Members.getById(x.pend.memberId))) : '') + '</span>'
         + '<input type="number" min="1" max="' + x.remaining + '" value="' + x.remaining + '" id="pp-qty-' + i + '" class="form-input pendpool-qty">'
         + '<button class="btn-sm btn-primary" onclick="MemberPage._claimPendRow(' + i + ')">帶入</button>'
         + '</div>';
@@ -8561,7 +8577,7 @@ var WalletPage = (function() {
     html += '<div><b>流水</b><br>' + entries.length + ' 筆</div>';
     html += '</div>';
 
-    html += '<div class="wallet-toolbar"><button class="btn btn-primary" onclick="WalletPage.showAddManual()">＋ 補登</button> <button class="btn" onclick="WalletPage.showAddLoan()">＋ 借支</button></div>';
+    html += '<div class="wallet-toolbar"><button class="btn btn-primary" onclick="WalletPage.showAddManual()">＋ 補登</button> <button class="btn" onclick="WalletPage.showAddPendAdvance()">＋ 墊付</button> <button class="btn" onclick="WalletPage.showAddLoan()">＋ 借支</button></div>';
     html += _loansPanelHtml(); // v2.2 未回收借支清單（常駐警示）
     html += '<p class="section-desc">只記實際掏出/收回的港幣現鈔；交收回款走結算系統不進錢包。點列可展開明細與編輯／刪除（自動流水不可直接改，請點「前往修改來源」改原單，錢包會自動更新）。借支是純現金借貸，不與帳務回碼／上下分抵銷。</p>';
 
@@ -8792,12 +8808,107 @@ var WalletPage = (function() {
     }
   }
 
+  // ===== v2.2.1 墊付＝預支開銷入口（門票代墊先買先扣，之後帶入帳務細分歸屬）=====
+  function _memLabel(m) { return m ? (m.id + (m.name ? ' ' + m.name : '')) : ''; }
+  var _wpPendRows = [];
+  function showAddPendAdvance() {
+    var trips = Trips.getAll().filter(function(t) { return t.status === TRIP_STATUS.ACTIVE; });
+    if (trips.length === 0) { Toast.error('目前沒有進行中的團，請先建團'); return; }
+    _wpPendRows = [{ name: '', qty: 1, pay: '' }];
+    var html = '';
+    html += '<p class="section-desc">門票等先買好的代墊：選團（＋可備註給哪位會員）→ 填明細 → 存檔當下錢包即扣。會員收工開帳務時可逐行帶入、細分數量給各會員。</p>';
+    html += '<div class="form-row">';
+    html += '<div class="form-group"><label>團</label><select id="wp-pend-trip" class="form-input" onchange="WalletPage._onPendTripChange()">';
+    trips.forEach(function(t) { html += '<option value="' + escAttr(t.id) + '">' + esc(Trips.displayName(t)) + '</option>'; });
+    html += '</select></div>';
+    html += '<div class="form-group"><label>會員（備註用，選填）</label><select id="wp-pend-member" class="form-input"><option value="">（不指定／之後再分）</option></select></div>';
+    html += '</div>';
+    html += '<div class="form-row">';
+    html += '<div class="form-group"><label>日期</label><input type="date" id="wp-pend-date" class="form-input" value="' + TWDate.todayStr() + '"></div>';
+    html += '<div class="form-group"><label>備註（選填）</label><input type="text" id="wp-pend-note" class="form-input" placeholder="例：水舞間豪華席門票"></div>';
+    html += '</div>';
+    html += '<div id="wp-pend-rows"></div>';
+    html += '<button class="btn-sm" onclick="WalletPage._wpAddRow()">+ 明細</button>';
+    html += '<div class="row-actions">';
+    html += '<button class="btn btn-primary" id="wp-pend-save-btn" onclick="WalletPage.savePendAdvance()">儲存（錢包即扣實支）</button></div>';
+    Modal.open('墊付（預支開銷）', html);
+    _onPendTripChange();
+    _renderWpPendRows();
+  }
+  function _onPendTripChange() {
+    var sel = document.getElementById('wp-pend-trip');
+    var memSel = document.getElementById('wp-pend-member');
+    if (!sel || !memSel) return;
+    var trip = Trips.getById(sel.value);
+    var ids = (trip && trip.memberIds && trip.memberIds.length) ? trip.memberIds : null;
+    var list = ids ? Members.getAll().filter(function(m) { return ids.indexOf(m.id) >= 0; })
+                   : Members.getAll();
+    var html = '<option value="">（不指定／之後再分）</option>';
+    list.forEach(function(m) { html += '<option value="' + escAttr(m.id) + '">' + esc(_memLabel(m)) + '</option>'; });
+    memSel.innerHTML = html;
+  }
+  function _renderWpPendRows() {
+    var el = document.getElementById('wp-pend-rows');
+    if (!el) return;
+    var html = '';
+    _wpPendRows.forEach(function(r, i) {
+      html += '<div class="form-row wp-pend-row">'
+        + '<div class="form-group"><label>品名</label><input type="text" class="form-input" value="' + escAttr(r.name) + '" placeholder="例：水舞間門票" oninput="WalletPage._wpSetRow(' + i + ',\'name\',this.value)"></div>'
+        + '<div class="form-group"><label>數量</label><input type="number" min="1" step="1" class="form-input" value="' + (r.qty || 1) + '" oninput="WalletPage._wpSetRow(' + i + ',\'qty\',this.value)"></div>'
+        + '<div class="form-group"><label>實支HK$</label><input type="number" inputmode="decimal" min="0" step="1" class="form-input" value="' + escAttr(r.pay) + '" placeholder="例：1756" oninput="WalletPage._wpSetRow(' + i + ',\'pay\',this.value)"></div>'
+        + '<div class="form-group"><label>&nbsp;</label><button class="btn-sm btn-danger" onclick="WalletPage._wpDelRow(' + i + ')">刪</button></div>'
+        + '</div>';
+    });
+    el.innerHTML = html;
+  }
+  function _wpSetRow(i, k, v) {
+    if (!_wpPendRows[i]) return;
+    if (k === 'qty') _wpPendRows[i].qty = Math.max(1, parseInt(v) || 1);
+    else _wpPendRows[i][k] = v;
+  }
+  function _wpAddRow() { _wpPendRows.push({ name: '', qty: 1, pay: '' }); _renderWpPendRows(); }
+  function _wpDelRow(i) {
+    if (_wpPendRows.length <= 1) { _wpPendRows = [{ name: '', qty: 1, pay: '' }]; }
+    else _wpPendRows.splice(i, 1);
+    _renderWpPendRows();
+  }
+  function savePendAdvance() {
+    var tripSel = document.getElementById('wp-pend-trip');
+    var tripId = tripSel ? tripSel.value : '';
+    var trip = Trips.getById(tripId);
+    if (!trip) { Toast.error('請選擇團'); return; }
+    if (trip.status !== TRIP_STATUS.ACTIVE) { Toast.error('此團已傳帳/封存，不可新增墊付'); return; }
+    var rows = [];
+    _wpPendRows.forEach(function(r) {
+      var pay = parseFloat(r.pay);
+      if (!r.name || isNaN(pay) || pay <= 0) return;
+      rows.push({ name: (r.name || '').trim(), quantity: Math.max(1, parseInt(r.qty) || 1), amountHK: pay, payout: pay });
+    });
+    if (rows.length === 0) { Toast.error('請至少填一筆明細（品名＋實支金額）'); return; }
+    var btn = document.getElementById('wp-pend-save-btn');
+    if (btn) btn.disabled = true;
+    var p = PendExps.create({
+      tripId: tripId,
+      agentId: trip.agentId || '',
+      shareholderId: trip.shareholderId || '',
+      memberId: (document.getElementById('wp-pend-member') || {}).value || '',
+      date: (document.getElementById('wp-pend-date') || {}).value || TWDate.todayStr(),
+      note: ((document.getElementById('wp-pend-note') || {}).value || '').trim(),
+      rows: rows,
+    });
+    if (!p) { Toast.error('儲存失敗，請檢查欄位'); if (btn) btn.disabled = false; return; }
+    Modal.close();
+    Toast.success('墊付已登錄（' + Trips.displayName(trip) + '），錢包已扣實支');
+    render();
+  }
+
   function showAddManual() {
     var html = '';
     html += '<div class="form-row">';
     html += '<div class="form-group"><label>方向</label><select id="wm-dir" class="form-input"><option value="in">收入（現鈔進來）</option><option value="out">支出（現鈔出去）</option></select></div>';
     html += '<div class="form-group"><label>分類</label><select id="wm-cat" class="form-input">';
     MANUAL_CATEGORIES.forEach(function(c) {
+      if (c.id === 'advance') return; // v2.2.1 墊付（門票代墊等）改走「＋ 墊付」＝預支開銷，之後可帶入帳務細分
       html += '<option value="' + c.id + '">' + c.label + '</option>';
     });
     html += '</select></div>';
@@ -8806,7 +8917,8 @@ var WalletPage = (function() {
     html += '<div class="form-group"><label>金額(HK$)</label><input type="number" inputmode="decimal" step="1" min="0" id="wm-amt" class="form-input" placeholder="例：50000"></div>';
     html += '<div class="form-group"><label>日期</label><input type="date" id="wm-date" class="form-input" value="' + TWDate.todayStr() + '"></div>';
     html += '</div>';
-    html += '<div class="form-group"><label>備註</label><input type="text" id="wm-note" class="form-input" placeholder="例：換匯領鈔／墊付計程車資"></div>';
+    html += '<div class="form-group"><label>備註</label><input type="text" id="wm-note" class="form-input" placeholder="例：換匯領鈔"></div>';
+    html += '<p class="section-desc">門票／代墊等先買好的支出請用「＋ 墊付」（可選團/會員，之後帶入帳務歸屬）。</p>';
     html += '<div class="row-actions"><button class="btn btn-primary" onclick="WalletPage.saveManual()">儲存</button></div>';
     Modal.open('錢包補登', html);
   }
@@ -8940,6 +9052,9 @@ var WalletPage = (function() {
     showEditLoan: showEditLoan, saveEditLoan: saveEditLoan, delLoan: delLoan, delRepay: delRepay,
     showEditOpen: showEditOpen, saveEditOpen: saveEditOpen, delOpen: delOpen, // v2.1.1
     gotoSource: gotoSource, gotoPend: gotoPend, // v2.1.1
+    showAddPendAdvance: showAddPendAdvance, savePendAdvance: savePendAdvance, // v2.2.1 墊付
+    _onPendTripChange: _onPendTripChange, _renderWpPendRows: _renderWpPendRows,
+    _wpSetRow: _wpSetRow, _wpAddRow: _wpAddRow, _wpDelRow: _wpDelRow,
   };
 })();
 
