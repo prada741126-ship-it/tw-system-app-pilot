@@ -6,7 +6,7 @@
  *   - 其他 → stale-while-revalidate
  */
 
-var CACHE_VERSION = 'tw-app-v2.2.0';  /// 2026-08-23 v2.2.0 借支登記:獨立追蹤(選會員+金額,存檔即扣)+部分回收+未回收清單(會員/天數/尚欠),錢包loan/loan_repay流水
+var CACHE_VERSION = 'tw-app-v2.2.1';  /// 2026-08-23 v2.2.1 錢包「＋墊付」=預支開銷入口(選團+會員備忘,存檔即扣,之後帳務逐行細分歸屬);補登移除墊付分類
 var STATIC_CACHE = CACHE_VERSION + '-static';
 var RUNTIME_CACHE = CACHE_VERSION + '-runtime';
 
