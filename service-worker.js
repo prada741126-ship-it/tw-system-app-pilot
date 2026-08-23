@@ -6,7 +6,7 @@
  *   - 其他 → stale-while-revalidate
  */
 
-var CACHE_VERSION = 'tw-app-v2.2.2';  /// 2026-08-23 v2.2.2 品項主檔:常用門票/餐券可下拉直接選取自動帶預設單價,其餘自訂品名登錄;錢包「品項設定」管理
+var CACHE_VERSION = 'tw-app-v2.2.3';  /// 2026-08-23 v2.2.3 固定票種(水舞間/水上樂園)改吃設定頁門票預設價格,單一資料來源隨設定即時變動;品項下拉分組(門票/其他品項/自訂)
 var STATIC_CACHE = CACHE_VERSION + '-static';
 var RUNTIME_CACHE = CACHE_VERSION + '-runtime';
 
