@@ -10228,6 +10228,10 @@ var RoomPage = (function() {
         /* forced paid 但 remaining=0（如總盤制達標時手動改收費）→ 全天數計費 */
         charge = Math.round((n * th / 100000) * roomFeeRate);
       }
+      /* 折扣：自動計算金額 × 折扣率（手動 chargeGuest 仍為最終覆蓋） */
+      if (b.feeType === FEE_TYPE.DISCOUNT && b.discountRate) {
+        charge = Math.round(charge * b.discountRate);
+      }
       if (b.chargeGuest && b.chargeGuest > 0) charge = b.chargeGuest;
     }
 
@@ -10713,9 +10717,14 @@ var FeesPage = (function() {
       if (b.feeType === FEE_TYPE.PAID) { isPaid = true; }
       else if (b.feeType === FEE_TYPE.FREE) { isPaid = false; }
       else if (b.feeType === FEE_TYPE.AUTO) { isPaid = remaining > 0; }
+      else if (b.feeType === FEE_TYPE.DISCOUNT) { isPaid = remaining > 0; }
       var charge = 0;
       if (isPaid && remaining > 0 && th > 0) {
         charge = Math.round((remaining * th / 100000) * roomFeeRate);
+        /* 折扣：自動計算金額 × 折扣率（手動 chargeGuest 仍為最終覆蓋） */
+        if (b.feeType === FEE_TYPE.DISCOUNT && b.discountRate) {
+          charge = Math.round(charge * b.discountRate);
+        }
         charge = b.chargeGuest || charge;
       }
 
@@ -10763,8 +10772,8 @@ var FeesPage = (function() {
         var th = b.threshold || 0;
         var n = b.nights || 1;
         var ft = b.feeType || 'auto';
-        var ftLabel = { auto: '自動', free: '免費', paid: '收費' }[ft] || '自動';
-        var ftColor = { auto: 'var(--info)', free: 'var(--success)', paid: 'var(--danger)' }[ft] || 'var(--info)';
+        var ftLabel = { auto: '自動', free: '免費', paid: '收費', discount: '折扣' + (b.discountRate ? (b.discountRate * 10).toFixed(1).replace(/\.0$/, '') + '折' : '') }[ft] || '自動';
+        var ftColor = { auto: 'var(--info)', free: 'var(--success)', paid: 'var(--danger)', discount: 'var(--warning)' }[ft] || 'var(--info)';
         html += '<div class="m-card">';
         html += '<div class="m-card-head"><span class="m-card-title">' + escHtml(b.guestName || '(未填客人)') + '</span>';
         html += '<span class="badge" style="background:' + ftColor + ';color:#fff;cursor:pointer;user-select:none;" onclick="FeesPage.toggleFeeType(\'' + b.id + '\')" title="點擊切換費用類型">' + ftLabel + '</span></div>';
@@ -10829,8 +10838,8 @@ var FeesPage = (function() {
         html += '<td class="num">' + (d.discount > 0 ? d.discount : '<span class="text-muted">0</span>') + '</td>';
         html += '<td class="num">' + (d.remaining <= 0 ? '<span class="text-success-strong">達標</span>' : '<span class="text-danger-strong">' + d.remaining + '</span>') + '</td>';
         var ft = b.feeType || 'auto';
-        var ftLabel = { auto: '自動', free: '免費', paid: '收費' }[ft] || '自動';
-        var ftColor = { auto: 'var(--info)', free: 'var(--success)', paid: 'var(--danger)' }[ft] || 'var(--info)';
+        var ftLabel = { auto: '自動', free: '免費', paid: '收費', discount: '折扣' + (b.discountRate ? (b.discountRate * 10).toFixed(1).replace(/\.0$/, '') + '折' : '') }[ft] || '自動';
+        var ftColor = { auto: 'var(--info)', free: 'var(--success)', paid: 'var(--danger)', discount: 'var(--warning)' }[ft] || 'var(--info)';
         html += '<td>';
         html += '<span class="badge" style="background:' + ftColor + ';color:#fff;cursor:pointer;user-select:none;" onclick="FeesPage.toggleFeeType(\'' + b.id + '\')" title="點擊切換費用類型">' + ftLabel + '</span>';
         html += '</td>';
