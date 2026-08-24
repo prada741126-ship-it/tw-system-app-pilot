@@ -6,7 +6,7 @@
  *   - 其他 → stale-while-revalidate
  */
 
-var CACHE_VERSION = 'tw-app-v2.2.4';  /// 2026-08-23 v2.2.4 稽核修復:墊付實支自動=成本價x數量(修短扣),切換品項即更新價格(修殘留舊價),墊付固定票存票種帶入帳務利潤不再漏算,各集合id加隨機後綴防同毫秒碰撞
+var CACHE_VERSION = 'tw-app-v2.2.5';  /// 2026-08-24 v2.2.5 訂房折扣費用:金額自動=原金額x折扣率(手動chargeGuest仍可覆蓋),折扣未收清視為未付,列表顯示折扣X折標籤(對應房務Bot折扣率可輸入)
 var STATIC_CACHE = CACHE_VERSION + '-static';
 var RUNTIME_CACHE = CACHE_VERSION + '-runtime';
 
