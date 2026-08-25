@@ -13005,7 +13005,7 @@ var HistoryPage = (function() {
     Modal.open('會員明細', html);
   }
 
-  return { render: render, toggleMonth: toggleMonth, toggleCard: toggleCard, showMemberDetail: showMemberDetail };
+  return { render: render, toggleMonth: toggleMonth, toggleCard: toggleCard, showMemberDetail: showMemberDetail, getTripBookings: getTripBookings };
 })();
 
 
@@ -14096,6 +14096,7 @@ function exposeGlobals() {
   window.ShareholderPage = ShareholderPage;
   window.MembersMgmtPage = MembersMgmtPage;
   window.HistoryPage = HistoryPage;
+  window.getTripBookings = HistoryPage.getTripBookings; // 團訂房歸屬查詢（測試/除錯用）
   window.ReportsPage = ReportsPage;
   window.SettingsPage = SettingsPage;
   window.AuditLogPage = AuditLogPage;
