@@ -6,7 +6,7 @@
  *   - 其他 → stale-while-revalidate
  */
 
-var CACHE_VERSION = 'tw-app-v2.2.7';  /// 2026-08-25 v2.2.7 APP主導合併Web：trips團號撞號防護+discountCount KPI+錢包流水頁
+var CACHE_VERSION = 'tw-app-v2.2.8';  /// 2026-08-26 v2.2.8 HistoryPage.getTripBookings 導出（團訂房歸屬測試/除錯）+ version.json dataRoot 修正
 var STATIC_CACHE = CACHE_VERSION + '-static';
 var RUNTIME_CACHE = CACHE_VERSION + '-runtime';
 
