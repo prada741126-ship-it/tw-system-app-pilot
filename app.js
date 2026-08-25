@@ -4571,7 +4571,7 @@ var Supplements = (function() {
   }
   function create(data) {
     var now = Date.now();
-    var amountNT = (data.amountHK || 0) * (data.exchangeRate || 0);
+    var amountNT = (data.amountHK || 0) * (data.exchangeRate || 4.2);
     var settlementAmount = roundDown(amountNT, -2);
 
     var sup = {
@@ -4610,7 +4610,7 @@ var Supplements = (function() {
     if (idx < 0) return null;
     var merged = Object.assign({}, arr[idx], patch);
     if (patch.amountHK !== undefined || patch.exchangeRate !== undefined) {
-      merged.amountNT = (merged.amountHK || 0) * (merged.exchangeRate || 0);
+      merged.amountNT = (merged.amountHK || 0) * (merged.exchangeRate || 4.2);
       merged.settlementAmount = roundDown(merged.amountNT, -2);
     }
     merged._updatedAt = Date.now();
@@ -4698,7 +4698,7 @@ var Settings = (function() {
   }
   function getExtraProfit(month) {
     var s = get();
-    return (s.extraProports || {})[month] || 0;
+    return (s.extraProfits || {})[month] || 0;
   }
   function getTicketPrices() {
     var s = get();
@@ -6907,8 +6907,7 @@ var PendingPage = (function() {
     var mtxs = MemberTxs.getByTrip(trip.id);
     var supplements = Supplements.getByTrip(trip.id);
 
-    // 訂房查詢：與代理面板(calcAgentQuota)口徑一致，按代理匹配而非僅靠 tripId
-    // 原因：Bot 建立訂房時可能選「不選團」導致 tripId 為空，getByTrip 會漏算
+    // 訂房查詢：有 tripId 只歸自己的團；無 tripId（Bot 建房）按代理＋入住日落於團期間歸屬
     var allBookings = Bookings.getAll();
     var tripAgentIds = {};
     mtxs.forEach(function(tx) {
@@ -6917,12 +6916,14 @@ var PendingPage = (function() {
     });
     if (trip.agentId) tripAgentIds[trip.agentId] = true;
     var bookings = allBookings.filter(function(b) {
+      if (b.tripId) return b.tripId === trip.id;
       var bAgentId = b.agentId;
-      if (!bAgentId && b.tripId && typeof Trips !== 'undefined') {
-        var tr = Trips.getById(b.tripId);
-        bAgentId = tr ? (tr.agentId || '') : '';
-      }
-      return bAgentId && tripAgentIds[bAgentId];
+      if (!bAgentId || !tripAgentIds[bAgentId]) return false;
+      var ci = b.checkIn || '';
+      if (!ci) return false;
+      if (trip.startDate && ci < trip.startDate) return false;
+      if (trip.endDate && ci > trip.endDate) return false;
+      return true;
     });
 
     var totalWash = mtxs.reduce(function(s, t) { return s + (t.washCode || 0); }, 0);
@@ -7165,7 +7166,7 @@ var PendingPage = (function() {
     var mtxs = MemberTxs.getByTrip(tripId);
     var supplements = Supplements.getByTrip(tripId);
 
-    // 訂房口徑與 buildTripCard 一致：按代理匹配
+    // 訂房口徑與 buildTripCard 一致：有 tripId 只歸自己的團；無 tripId 按代理＋入住日歸屬
     var allBookings = Bookings.getAll();
     var tripAgentIds = {};
     mtxs.forEach(function(tx) {
@@ -7174,12 +7175,14 @@ var PendingPage = (function() {
     });
     if (trip.agentId) tripAgentIds[trip.agentId] = true;
     var bookings = allBookings.filter(function(b) {
+      if (b.tripId) return b.tripId === trip.id;
       var bAgentId = b.agentId;
-      if (!bAgentId && b.tripId) {
-        var tr = Trips.getById(b.tripId);
-        bAgentId = tr ? (tr.agentId || '') : '';
-      }
-      return bAgentId && tripAgentIds[bAgentId];
+      if (!bAgentId || !tripAgentIds[bAgentId]) return false;
+      var ci = b.checkIn || '';
+      if (!ci) return false;
+      if (trip.startDate && ci < trip.startDate) return false;
+      if (trip.endDate && ci > trip.endDate) return false;
+      return true;
     });
 
     var totalWash = mtxs.reduce(function(s, t) { return s + (t.washCode || 0); }, 0);
@@ -12731,7 +12734,7 @@ var HistoryPage = (function() {
     if (container) container.innerHTML = html;
   }
 
-  // 統一的訂房查詢（與 pending.js 一致，按代理匹配）
+  // 統一的訂房查詢：有 tripId 只歸自己的團；無 tripId（Bot 建房）按代理＋入住日落於團期間歸屬
   function getTripBookings(trip) {
     var mtxs = MemberTxs.getByTrip(trip.id);
     var allBookings = Bookings.getAll();
@@ -12742,12 +12745,14 @@ var HistoryPage = (function() {
     });
     if (trip.agentId) tripAgentIds[trip.agentId] = true;
     return allBookings.filter(function(b) {
+      if (b.tripId) return b.tripId === trip.id;
       var bAgentId = b.agentId;
-      if (!bAgentId && b.tripId && typeof Trips !== 'undefined') {
-        var tr = Trips.getById(b.tripId);
-        bAgentId = tr ? (tr.agentId || '') : '';
-      }
-      return bAgentId && tripAgentIds[bAgentId];
+      if (!bAgentId || !tripAgentIds[bAgentId]) return false;
+      var ci = b.checkIn || '';
+      if (!ci) return false;
+      if (trip.startDate && ci < trip.startDate) return false;
+      if (trip.endDate && ci > trip.endDate) return false;
+      return true;
     });
   }
 
