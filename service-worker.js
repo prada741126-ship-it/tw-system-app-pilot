@@ -6,7 +6,7 @@
  *   - 其他 → stale-while-revalidate
  */
 
-var CACHE_VERSION = 'tw-app-v2.2.5';  /// 2026-08-24 v2.2.5 訂房折扣費用:金額自動=原金額x折扣率(手動chargeGuest仍可覆蓋),折扣未收清視為未付,列表顯示折扣X折標籤(對應房務Bot折扣率可輸入)
+var CACHE_VERSION = 'tw-app-v2.2.6';  /// 2026-08-25 v2.2.6 extraProfits typo修正,補帳匯率fallback 4.2,跨團訂房去重(有tripId歸屬自己團/無tripId按代理+入住日落團期間)
 var STATIC_CACHE = CACHE_VERSION + '-static';
 var RUNTIME_CACHE = CACHE_VERSION + '-runtime';
 
