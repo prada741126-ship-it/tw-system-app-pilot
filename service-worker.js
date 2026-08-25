@@ -6,7 +6,7 @@
  *   - 其他 → stale-while-revalidate
  */
 
-var CACHE_VERSION = 'tw-app-v2.2.6';  /// 2026-08-25 v2.2.6 extraProfits typo修正,補帳匯率fallback 4.2,跨團訂房去重(有tripId歸屬自己團/無tripId按代理+入住日落團期間)
+var CACHE_VERSION = 'tw-app-v2.2.7';  /// 2026-08-25 v2.2.7 APP主導合併Web：trips團號撞號防護+discountCount KPI+錢包流水頁
 var STATIC_CACHE = CACHE_VERSION + '-static';
 var RUNTIME_CACHE = CACHE_VERSION + '-runtime';
 
