@@ -3354,12 +3354,18 @@ var Trips = (function() {
   function create(data) {
     var now = Date.now();
     var dateStr = TWDate.todayStr().replace(/-/g, '');
-    var seq = (getAll().filter(function(t) {
-      return t.id && t.id.indexOf('T' + dateStr) === 0;
-    }).length + 1).toString().padStart(3, '0');
+    /* 序号取「同日所有团（含已删除墓碑）」的最大值+1，防止删除后撞号 */
+    var seq = 1;
+    (State.get('trips') || []).forEach(function(t) {
+      if (t.id && t.id.indexOf('T' + dateStr) === 0) {
+        var n = parseInt(t.id.substring(1 + dateStr.length), 10);
+        if (!isNaN(n) && n >= seq) seq = n + 1;
+      }
+    });
+    var seqStr = String(seq).padStart(3, '0');
 
     var trip = {
-      id: 'T' + dateStr + seq,
+      id: 'T' + dateStr + seqStr,
       shareholderId: data.shareholderId || '',
       agentId: data.agentId || '',
       vipHallId: data.vipHallId || '',
@@ -9552,6 +9558,7 @@ var RoomPage = (function() {
     var totalThreshold = 0;
     var freeCount = 0;
     var paidCount = 0;
+    var discountCount = 0;
     var statusCounts = { 'pending': 0, 'confirmed': 0, 'checked-in': 0, 'checked-out': 0, 'cancelled': 0 };
 
     displayBookings.forEach(function(b) {
@@ -9560,6 +9567,7 @@ var RoomPage = (function() {
       totalThreshold += (b.threshold || 0) * n;
       if (b.feeType === 'free') freeCount++;
       if (b.feeType === 'paid') paidCount++;
+      if (b.feeType === 'discount') discountCount++;
       if (statusCounts[b.status] !== undefined) statusCounts[b.status]++;
     });
 
@@ -9592,6 +9600,7 @@ var RoomPage = (function() {
     html += kpiCard('總門檻(萬)', formatNum(totalThreshold / 10000), 'highlight', ICONS.threshold);
     html += kpiCard('免費房', freeCount, 'normal', ICONS.free);
     html += kpiCard('收費房', paidCount, 'warning', ICONS.paid);
+    html += kpiCard('折扣房', discountCount, 'normal', ICONS.paid);
     html += '</div>';
 
     /* === 費用公式提示（僅展開面板時顯示）=== */
