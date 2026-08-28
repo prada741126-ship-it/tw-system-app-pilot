@@ -6,7 +6,7 @@
  *   - 其他 → stale-while-revalidate
  */
 
-var CACHE_VERSION = 'tw-app-v2.3.3';  /// 2026-08-28 v2.3.3 代理管理頁達標計算含封存團（1437.9萬 vs 880萬門檻正確顯示達標）；帳務明細維持排除封存團
+var CACHE_VERSION = 'tw-app-v2.3.4';  /// 2026-08-29 v2.3.4 ①錢包衍生流水墓碑不得由對帳重建（刪除不復活）；刪團級聯刪預支單 ②結帳封存級聯綁定該團訂房（房務明細跟著封存）；強制全量同步補齊錢包/預支/借支
 var STATIC_CACHE = CACHE_VERSION + '-static';
 var RUNTIME_CACHE = CACHE_VERSION + '-runtime';
 
