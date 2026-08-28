@@ -6,7 +6,7 @@
  *   - 其他 → stale-while-revalidate
  */
 
-var CACHE_VERSION = 'tw-app-v2.3.1';  /// 2026-08-28 v2.3.1 代理帳務頁排除封存團帳務 + 衝突偵測改三方比對（WEB 單方面編輯不再誤報衝突）
+var CACHE_VERSION = 'tw-app-v2.3.2';  /// 2026-08-28 v2.3.2 修孤兒 booking/孤兒 tx（團已墓碑的 booking/tx 不再計入配額）+ Trips.remove 級聯刪除 booking
 var STATIC_CACHE = CACHE_VERSION + '-static';
 var RUNTIME_CACHE = CACHE_VERSION + '-runtime';
 
