@@ -1,1 +1,11 @@
-{"version":"v2.3.2","buildTime":1787990000000,"platform":"app","env":"pilot","dataRoot":"taiwan_data/pilot"}
+{
+  "version": "v2.3.3_1787993600000",
+  "buildTime": 1787993600000,
+  "date": "2026-08-28",
+  "dataRoot": "taiwan_data/pilot",
+  "notes": [
+    "代理管理頁達標計算含封存團：代理累積所有團（含封存）總洗碼後結算是否達標",
+    "帳務頁/房間頁帳務明細維持排除封存團（團歸團）",
+    "墓碑團（已刪除）的資料一律不計入"
+  ]
+}
