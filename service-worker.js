@@ -6,7 +6,7 @@
  *   - 其他 → stale-while-revalidate
  */
 
-var CACHE_VERSION = 'tw-app-v2.3.2';  /// 2026-08-28 v2.3.2 修孤兒 booking/孤兒 tx（團已墓碑的 booking/tx 不再計入配額）+ Trips.remove 級聯刪除 booking
+var CACHE_VERSION = 'tw-app-v2.3.3';  /// 2026-08-28 v2.3.3 代理管理頁達標計算含封存團（1437.9萬 vs 880萬門檻正確顯示達標）；帳務明細維持排除封存團
 var STATIC_CACHE = CACHE_VERSION + '-static';
 var RUNTIME_CACHE = CACHE_VERSION + '-runtime';
 
