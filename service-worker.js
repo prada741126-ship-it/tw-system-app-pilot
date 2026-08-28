@@ -6,7 +6,7 @@
  *   - 其他 → stale-while-revalidate
  */
 
-var CACHE_VERSION = 'tw-app-v2.2.8';  /// 2026-08-26 v2.2.8 HistoryPage.getTripBookings 導出（團訂房歸屬測試/除錯）+ version.json dataRoot 修正
+var CACHE_VERSION = 'tw-app-v2.3.0';  /// 2026-08-28 v2.3.0 syncUploadAll 改為「先拉後合併差異上傳」，修復 APP/WEB 本地舊資料覆蓋雲端墓碑/新修改的同步根本缺陷
 var STATIC_CACHE = CACHE_VERSION + '-static';
 var RUNTIME_CACHE = CACHE_VERSION + '-runtime';
 
