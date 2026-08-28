@@ -1,5 +1,5 @@
-// [BUILD] v2.3.1_1787985600000
-window.TW_BUILD_VERSION = "v2.3.1_1787985600000";
+// [BUILD] v2.3.2_1787990000000
+window.TW_BUILD_VERSION = "v2.3.2_1787990000000";
 
 // [DEV BUILD] 測試環境 — 資料導向 taiwan_data_dev/，不污染正式資料
 window.TW_DEV_MODE = true;
@@ -1307,11 +1307,12 @@ function calcAgentQuota(agentId, memberTxs, bookings) {
     }
     return '';
   }
-  // 過濾掉已封存團的交易/訂房（封存後不再計入配額）
+  // 過濾掉已封存團、或團已被墓碑刪除的交易/訂房
+  // - 有 tripId 但 Trips.getById 找不到 → 團已被墓碑刪除 → 視為失效，不計入
   function _isNotSealed(t) {
     if (!t.tripId || typeof Trips === 'undefined') return true;
     var trip = Trips.getById(t.tripId);
-    if (!trip) return true;
+    if (!trip) return false;
     return trip.status !== 'sealed';
   }
   var agentTxs = (memberTxs || []).filter(function(t) { return _effectiveAgentId(t) === agentId && _isNotSealed(t); });
@@ -3573,6 +3574,28 @@ var Trips = (function() {
     var obj = {}; obj[arr[idx]._fbKey] = arr[idx];
     enqueue(FB_PATH.TRIPS, obj);
     EventBus.emit(EVENTS.TRIP_UPDATED, arr[idx]);
+
+    /* v2.3.2 級聯刪除該團所有 booking：避免「房間使用額度」孤兒繼續佔用配額 */
+    _cascadeDeleteBookingsForTrip(id);
+  }
+  /* 級聯刪除指定團的所有 booking（墓碑 + enqueue） */
+  function _cascadeDeleteBookingsForTrip(tripId) {
+    if (typeof Bookings === 'undefined' || !Bookings || typeof Bookings.getByTrip !== 'function') return;
+    var bks = Bookings.getByTrip(tripId);
+    if (!bks || bks.length === 0) return;
+    var now = Date.now();
+    var payloads = {};
+    var fullArr = State.get('bookings') || [];
+    bks.forEach(function(b) {
+      var i = fullArr.findIndex(function(x) { return x.id === b.id; });
+      if (i >= 0) {
+        fullArr[i]._deleted = true;
+        fullArr[i]._updatedAt = now;
+        payloads[fullArr[i]._fbKey] = fullArr[i];
+      }
+    });
+    if (typeof Bookings.save === 'function') Bookings.save(fullArr);
+    if (Object.keys(payloads).length > 0 && typeof enqueue === 'function') enqueue(FB_PATH.BOOKINGS, payloads);
   }
   // v2.1 顯示名稱：T20260823 · 猴哥團東哥（無備註只顯示 ID）
   function displayName(tripOrId) {
@@ -11451,12 +11474,13 @@ var AgentPage = (function() {
     } else {
       agents.forEach(function(agent) {
         var sh = Shareholders.getById(agent.shareholderId);
-        /* 與 WEB agent.js / calcAgentQuota 同口徑：排除封存團（無 tripId 的 Bot 資料保留）
-           v2.3.1 修正：WEB 封存團後 APP 代理帳務頁仍顯示該團帳務明細 */
+        /* 與 WEB agent.js / calcAgentQuota 同口徑：排除封存團、及團已被墓碑刪除的訂房/帳務
+           （無 tripId 的 Bot 資料保留）；v2.3.2 順便修：團已刪除也排除 */
         function notSealed(t) {
           if (!t.tripId) return true;
           var trip = Trips.getById(t.tripId);
-          return !trip || trip.status !== TRIP_STATUS.SEALED;
+          if (!trip) return false;
+          return trip.status !== TRIP_STATUS.SEALED;
         }
         var agentTxs = mtxs.filter(function(t) {
           var effectiveAgentId = t.agentId;
