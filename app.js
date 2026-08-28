@@ -1,5 +1,5 @@
-// [BUILD] v2.3.0_1787981176365
-window.TW_BUILD_VERSION = "v2.3.0_1787981176365";
+// [BUILD] v2.3.1_1787985600000
+window.TW_BUILD_VERSION = "v2.3.1_1787985600000";
 
 // [DEV BUILD] 測試環境 — 資料導向 taiwan_data_dev/，不污染正式資料
 window.TW_DEV_MODE = true;
@@ -1700,6 +1700,43 @@ function _dataDiffers(a, b) {
   return false;
 }
 
+/* v2.3.1 三方比對同步基準（解決「WEB 單方面編輯 → APP 誤報衝突」）：
+ * 舊邏輯只看「本地 vs 雲端」 內容不同就記衝突——但 WEB 編輯後 APP 本地只是還沒收到更新的舊版，
+ * 這是正常同步而非衝突，導致 APP 一直跳衝突提示。
+ * 新邏輯：每次合併完成後記下「同步基準」（內容簽名）；下次合併時，
+ * 只有「本地內容 ≠ 基準（本地這邊也改過）」且「雲端內容 ≠ 本地（雲端也改過）」才算真衝突。
+ * 基準為本機記憶體（重啟後重置）——重啟後本地即上次合併結果，視為未修改，不誤報。 */
+var _syncBaseline = {}; // { collection: { fbKey: contentSignature } }
+
+function _contentSig(item) {
+  if (!item) return '';
+  var copy = {};
+  Object.keys(item).forEach(function(k) {
+    if (k === '_updatedAt' || k === '_reviveAt' || k === '_run') return;
+    copy[k] = item[k];
+  });
+  return _stableStringify(copy);
+}
+
+/** 合併結果持久化後呼叫：更新該集合的同步基準（watcher / _resyncAll / syncUploadAll 皆須呼叫） */
+function updateSyncBaseline(collection, arr) {
+  var c = collection || '_';
+  var base = {};
+  (arr || []).forEach(function(item) {
+    if (item && item._fbKey) base[item._fbKey] = _contentSig(item);
+  });
+  _syncBaseline[c] = base;
+}
+
+/** 本地此筆是否在上次同步後被修改過（無基準＝視為未修改，避免誤報） */
+function _localModifiedSinceSync(collection, fbKey, lItem) {
+  var base = _syncBaseline[collection || '_'];
+  if (!base) return false;
+  var sig = base[fbKey];
+  if (sig === undefined) return false;
+  return sig !== _contentSig(lItem);
+}
+
 function mergeArray(local, remote) {
   var localArr = local || [];
   var remoteArr = remote || [];
@@ -1777,8 +1814,9 @@ function mergeArrayWithConflicts(local, remote, collection) {
     var rTs = rItem._updatedAt || 0;
     var winner = rTs >= lTs ? 'remote' : 'local';
     map[rItem._fbKey] = winner === 'remote' ? rItem : lItem;
-    // 真衝突：資料內容不同（非僅時間戳）
-    if (_dataDiffers(lItem, rItem)) {
+    // 真衝突（v2.3.1 三方比對）：雲端內容 ≠ 本地，且本地自上次同步基準後也被改過
+    // （WEB 單方面編輯 → 本地未改 → 只同步不報衝突）
+    if (_dataDiffers(lItem, rItem) && _localModifiedSinceSync(collection, rItem._fbKey, lItem)) {
       conflicts.push({
         fbKey: rItem._fbKey,
         collection: collection || '',
@@ -2053,6 +2091,7 @@ function syncUploadAll(dataMap) {
           if (storeKey) Store.writeArray(storeKey, merged);
           State.set(meta.stateKey, merged);
           if (EVENTS[meta.event]) EventBus.emit(EVENTS[meta.event], merged);
+          updateSyncBaseline(meta.stateKey, merged); // v2.3.1 三方比對基準（須在 recalc 之後）
         }
 
         if (Object.keys(toUpload).length > 0) {
@@ -3082,6 +3121,7 @@ function _setupWatchers() {
         Store.writeArray(w.storeKey, merged);
         State.set(w.stateKey, merged);
         EventBus.emit(w.event, merged);
+        updateSyncBaseline(w.stateKey, merged); // v2.3.1 三方比對基準（須在 recalc 之後）
       } catch(e) {
         console.error('[Watchers] ' + w.key, e);
       }
@@ -3183,6 +3223,7 @@ function _resyncAll() {
       Store.writeArray(cfg.storeKey, merged);
       State.set(cfg.stateKey, merged);
       EventBus.emit(cfg.event, merged);
+      updateSyncBaseline(cfg.stateKey, merged); // v2.3.1 三方比對基準（須在 recalc 之後）
     }).catch(function(e) {
       console.error('[Watchers] _resyncAll failed for ' + path, e);
     });
@@ -11410,13 +11451,20 @@ var AgentPage = (function() {
     } else {
       agents.forEach(function(agent) {
         var sh = Shareholders.getById(agent.shareholderId);
+        /* 與 WEB agent.js / calcAgentQuota 同口徑：排除封存團（無 tripId 的 Bot 資料保留）
+           v2.3.1 修正：WEB 封存團後 APP 代理帳務頁仍顯示該團帳務明細 */
+        function notSealed(t) {
+          if (!t.tripId) return true;
+          var trip = Trips.getById(t.tripId);
+          return !trip || trip.status !== TRIP_STATUS.SEALED;
+        }
         var agentTxs = mtxs.filter(function(t) {
           var effectiveAgentId = t.agentId;
           if (!effectiveAgentId && t.tripId) {
             var trip = Trips.getById(t.tripId);
             effectiveAgentId = trip ? (trip.agentId || '') : '';
           }
-          return effectiveAgentId === agent.id;
+          return effectiveAgentId === agent.id && notSealed(t);
         });
         var agentBookings = bookings.filter(function(b) {
           var effectiveAgentId = b.agentId;
@@ -11424,7 +11472,7 @@ var AgentPage = (function() {
             var trip = Trips.getById(b.tripId);
             effectiveAgentId = trip ? (trip.agentId || '') : '';
           }
-          return effectiveAgentId === agent.id;
+          return effectiveAgentId === agent.id && notSealed(b);
         });
         var quota = calcAgentQuota(agent.id, mtxs, bookings);
         var totalSettle = agentTxs.reduce(function(s, t) { return s + (t.totalSettlement || 0); }, 0);
