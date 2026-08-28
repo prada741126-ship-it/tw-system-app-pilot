@@ -1,5 +1,5 @@
-// [BUILD] v2.3.3_1787993600000
-window.TW_BUILD_VERSION = "v2.3.3_1787993600000";
+// [BUILD] v2.3.4_1788002400000
+window.TW_BUILD_VERSION = "v2.3.4_1788002400000";
 
 // [DEV BUILD] 測試環境 — 資料導向 taiwan_data_dev/，不污染正式資料
 window.TW_DEV_MODE = true;
@@ -3559,6 +3559,8 @@ var Trips = (function() {
       sealedAt: Date.now(),
       sealedMonth: sealedMonth,
     });
+    /* v2.3.4 級聯封存：該團關聯訂房一併綁定團並標記 sealedAt，讓房務明細跟著團封存 */
+    _cascadeSealBookingsForTrip(id);
     // Phase 1D / 1.16：封存事件獨立廣播（供審計 autoLog 記錄 seal 動作 + 回收站追蹤可還原）
     if (updated) EventBus.emit(EVENTS.TRIP_SEALED, updated);
     return updated;
@@ -3582,6 +3584,9 @@ var Trips = (function() {
 
     /* v2.3.2 級聯刪除該團所有 booking：避免「房間使用額度」孤兒繼續佔用配額 */
     _cascadeDeleteBookingsForTrip(id);
+    /* v2.3.4 級聯刪除該團所有預支單（含衍生錢包流水）：
+       避免孤兒預支被對帳機制重建錢包流水，導致已刪資料復活 */
+    _cascadeDeletePendExpsForTrip(id);
   }
   /* 級聯刪除指定團的所有 booking（墓碑 + enqueue） */
   function _cascadeDeleteBookingsForTrip(tripId) {
@@ -3601,6 +3606,40 @@ var Trips = (function() {
     });
     if (typeof Bookings.save === 'function') Bookings.save(fullArr);
     if (Object.keys(payloads).length > 0 && typeof enqueue === 'function') enqueue(FB_PATH.BOOKINGS, payloads);
+  }
+  /* v2.3.4 級聯封存指定團的所有訂房：
+     - 有 tripId 且屬於該團 → 標記 sealedAt
+     - 無 tripId（Bot 訂房）但會員屬於該團 → 補綁 tripId + sealedAt
+     封存後由 filterActiveBookings 排除（房務明細跟著團封存）；代理配額含封存口徑照算 */
+  function _cascadeSealBookingsForTrip(tripId) {
+    if (typeof Bookings === 'undefined' || !Bookings) return;
+    var trip = getById(tripId);
+    if (!trip) return;
+    var memberIds = {};
+    (trip.memberIds || []).forEach(function(mid) { memberIds[mid] = true; });
+    var now = Date.now();
+    var payloads = {};
+    var fullArr = State.get('bookings') || [];
+    fullArr.forEach(function(b) {
+      if (!b || b._deleted) return;
+      var linked = (b.tripId === tripId) || (!b.tripId && b.memberId && memberIds[b.memberId]);
+      if (!linked) return;
+      b.tripId = tripId;
+      b.sealedAt = now;
+      b._updatedAt = now;
+      if (b._fbKey) payloads[b._fbKey] = b;
+    });
+    if (Object.keys(payloads).length > 0) {
+      if (typeof Bookings.save === 'function') Bookings.save(fullArr);
+      if (typeof enqueue === 'function') enqueue(FB_PATH.BOOKINGS, payloads);
+    }
+  }
+  /* v2.3.4 級聯刪除指定團的所有預支單（PendExps.remove 發 PEXP_DELETED → Wallet.removeForPend 連動刪流水） */
+  function _cascadeDeletePendExpsForTrip(tripId) {
+    if (typeof PendExps === 'undefined' || !PendExps || typeof PendExps.getByTrip !== 'function') return;
+    (PendExps.getByTrip(tripId) || []).forEach(function(p) {
+      if (p && p.id && typeof PendExps.remove === 'function') PendExps.remove(p.id);
+    });
   }
   // v2.1 顯示名稱：T20260823 · 猴哥團東哥（無備註只顯示 ID）
   function displayName(tripOrId) {
@@ -3799,7 +3838,8 @@ var Wallet = (function() {
     var idx = arr.findIndex(function(w) { return w.id === entry.id; });
     var now = Date.now();
     if (idx >= 0) {
-      if (!arr[idx]._deleted && _same(arr[idx], entry)) return; // 完全相同 → 不動
+      if (arr[idx]._deleted) return; // v2.3.4 已刪除（墓碑）流水不得由衍生對帳重建復活（刪除永遠贏）
+      if (_same(arr[idx], entry)) return; // 完全相同 → 不動
       entry.createdAt = arr[idx].createdAt || now;
     } else {
       entry.createdAt = now;
@@ -15099,6 +15139,9 @@ var MobileSync = (function() {
       { fbKey: 'SHAREHOLDERS',  storeKey: STORAGE_KEYS.SHAREHOLDERS,  event: EVENTS.SHAREHOLDERS_LOADED,  stateKey: 'shareholders' },
       { fbKey: 'TRIPS',         storeKey: STORAGE_KEYS.TRIPS,         event: EVENTS.TRIPS_LOADED,         stateKey: 'trips' },
       { fbKey: 'MEMBER_TXS',    storeKey: STORAGE_KEYS.MEMBER_TXS,    event: EVENTS.MTX_LOADED,           stateKey: 'memberTxs' },
+      { fbKey: 'WALLET_TXS',    storeKey: STORAGE_KEYS.WALLET_TXS,    event: EVENTS.WALLET_TXS_LOADED,    stateKey: 'walletTxs' }, // v2.3.4 補齊：錢包流水可由雲端墓碑修復本地
+      { fbKey: 'PENDING_EXPS',  storeKey: STORAGE_KEYS.PENDING_EXPS,  event: EVENTS.PENDING_EXPS_LOADED,  stateKey: 'pendingExps' }, // v2.3.4 補齊
+      { fbKey: 'LOANS',         storeKey: STORAGE_KEYS.LOANS,         event: EVENTS.LOANS_LOADED,         stateKey: 'loans' }, // v2.3.4 補齊
       { fbKey: 'BOOKINGS',      storeKey: STORAGE_KEYS.BOOKINGS,      event: EVENTS.BOOKINGS_LOADED,      stateKey: 'bookings' },
       { fbKey: 'SUPPLEMENTS',   storeKey: STORAGE_KEYS.SUPPLEMENTS,   event: EVENTS.SYNC_COMPLETE,        stateKey: 'supplements' },
       { fbKey: 'SETTINGS',      storeKey: STORAGE_KEYS.SETTINGS,      event: EVENTS.SETTINGS_LOADED,      stateKey: 'settings' },
