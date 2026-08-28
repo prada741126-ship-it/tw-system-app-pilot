@@ -1,5 +1,5 @@
-// [BUILD] v1.0.0_dev_1787347514298
-window.TW_BUILD_VERSION = "v1.0.0_dev_1787347514298";
+// [BUILD] v2.3.0_1787981176365
+window.TW_BUILD_VERSION = "v2.3.0_1787981176365";
 
 // [DEV BUILD] 測試環境 — 資料導向 taiwan_data_dev/，不污染正式資料
 window.TW_DEV_MODE = true;
@@ -1971,26 +1971,120 @@ function _processQueue() {
   });
 }
 
-// 全量同步上傳
+// 每個集合對應的本地寫回目標（與 watchers watchList 一致）
+var _UPLOAD_META = {
+  MEMBERS:       { stateKey: 'members',      event: 'MEMBERS_LOADED' },
+  AGENTS:        { stateKey: 'agents',       event: 'AGENTS_LOADED' },
+  SHAREHOLDERS:  { stateKey: 'shareholders', event: 'SHAREHOLDERS_LOADED' },
+  TRIPS:         { stateKey: 'trips',        event: 'TRIPS_LOADED' },
+  MEMBER_TXS:    { stateKey: 'memberTxs',    event: 'MTX_LOADED' },
+  WALLET_TXS:    { stateKey: 'walletTxs',    event: 'WALLET_TXS_LOADED' },
+  PENDING_EXPS:  { stateKey: 'pendingExps',  event: 'PENDING_EXPS_LOADED' },
+  CATALOG:       { stateKey: 'catalog',      event: 'CATALOG_LOADED' },
+  LOANS:         { stateKey: 'loans',        event: 'LOANS_LOADED' },
+  BOOKINGS:      { stateKey: 'bookings',     event: 'BOOKINGS_LOADED' },
+  SUPPLEMENTS:   { stateKey: 'supplements',  event: 'SYNC_COMPLETE' },
+  SETTINGS:      { stateKey: 'settings',     event: 'SETTINGS_LOADED' },
+  EXTRA_INCOME:  { stateKey: 'extraIncome',  event: 'SYNC_COMPLETE' },
+  HOTEL_CONFIG:  { stateKey: 'hotelConfig',  event: 'HOTEL_CONFIG_LOADED' },
+  USERS:         { stateKey: 'users',        event: 'USERS_LOADED' },
+  AUDIT_LOG:     { stateKey: 'auditLog',     event: 'AUDIT_LOADED' },
+};
+
+// 全量同步上傳 —— 修正「盲寫全量覆蓋雲端」的根本缺陷：
+// 舊版直接把本地所有「非 _deleted」資料 PATCH 上雲端，無條件覆蓋雲端同名 _fbKey，
+// 導致本端（APP/WEB）本地舊資料把另一端的新修改 / 刪除墓碑覆蓋回去（刪除復活、修改被蓋回）。
+// 新版改為「先拉後合併差異上傳」：
+//   1) 先 fbOnce 拉取雲端
+//   2) mergeArrayWithConflicts 合併（墓碑永遠贏 > 時間戳決勝 > 聯集），真衝突交 Conflicts 記錄
+//   3) 只上傳「本地確實比雲端新」的差異項（含本地墓碑；雲端墓碑絕不覆蓋）
+//   4) 合併結果寫回本地，確保與雲端對齊
 function syncUploadAll(dataMap) {
-  Object.keys(dataMap).forEach(function(key) {
+  return Promise.all(Object.keys(dataMap).map(function(key) {
     var path = FB_PATH[key];
-    if (!path) return;
     var data = dataMap[key];
-    if (!data) return;
+    if (!path || !data) return Promise.resolve();
 
     if (Array.isArray(data)) {
-      var obj = {};
-      data.forEach(function(item) {
-        if (item && item._fbKey && !item._deleted) {
-          obj[item._fbKey] = item;
+      return fbOnce(path).then(function(remoteVal) {
+        var remoteObj = remoteVal || {};
+        var remoteArr = Object.keys(remoteObj).map(function(k) { return remoteObj[k]; });
+
+        // 1) 合併（帶衝突偵測）
+        var mergeRes = mergeArrayWithConflicts(data, remoteArr, (_UPLOAD_META[key] || {}).stateKey || key);
+        var merged = mergeRes.merged;
+        if (mergeRes.conflicts.length > 0 && typeof Conflicts !== 'undefined') {
+          Conflicts.record((_UPLOAD_META[key] || {}).stateKey || key, mergeRes.conflicts);
         }
+
+        // MEMBER_TXS：合併後重新計算衍生欄位（與 watchers 一致）
+        if (key === 'MEMBER_TXS' && typeof calcMemberTx === 'function') {
+          merged = merged.map(function(tx) {
+            if (!tx || tx._deleted) return tx;
+            if (tx.outCode === undefined && tx.backCode === undefined && tx.washCode === undefined) return tx;
+            return Object.assign({}, tx, calcMemberTx(tx));
+          });
+        }
+
+        // 2) 只上傳「本地贏家」的差異項（關鍵：雲端墓碑永遠贏，任何本地資料不得覆蓋）
+        var toUpload = {};
+        data.forEach(function(item) {
+          if (!item || !item._fbKey) return;
+          var rItem = remoteObj[item._fbKey];
+          if (!rItem) {
+            // 雲端無此筆 → 新增（含本地墓碑）
+            toUpload[item._fbKey] = item;
+          } else if (rItem._deleted) {
+            // 雲端已是墓碑 → 墓碑永遠贏，本地資料（活或墓碑）一律不得覆蓋
+            return;
+          } else if (item._deleted) {
+            // 本地墓碑、雲端活資料 → 上傳墓碑，確保雲端執行刪除
+            toUpload[item._fbKey] = item;
+          } else if ((item._updatedAt || 0) > (rItem._updatedAt || 0)) {
+            // 兩者皆活、本地較新 → 上傳
+            toUpload[item._fbKey] = item;
+          }
+        });
+
+        // 3) 合併結果寫回本地（與雲端對齊）
+        var meta = _UPLOAD_META[key];
+        if (meta) {
+          var storeKey = STORAGE_KEYS[key];
+          if (storeKey) Store.writeArray(storeKey, merged);
+          State.set(meta.stateKey, merged);
+          if (EVENTS[meta.event]) EventBus.emit(EVENTS[meta.event], merged);
+        }
+
+        if (Object.keys(toUpload).length > 0) {
+          console.log('[Uploader] syncUploadAll ' + key + ' 上傳 ' + Object.keys(toUpload).length + ' 筆差異');
+          return fbPatch(path, toUpload);
+        }
+        return null;
+      }).catch(function(e) {
+        console.error('[Uploader] syncUploadAll ' + key + ' 失敗（沿用本地資料）', e);
+        return null;
       });
-      fbPatch(path, obj);
-    } else if (typeof data === 'object') {
-      fbPatch(path, data);
     }
-  });
+
+    if (typeof data === 'object') {
+      // EMPLOYEE_LIST 等物件型：比對 addedAt 差異上傳
+      return fbOnce(path).then(function(remoteVal) {
+        var remoteObj = remoteVal || {};
+        var toUpd = {};
+        Object.keys(data).forEach(function(k) {
+          var l = data[k]; var r = remoteObj[k];
+          if (!r) { toUpd[k] = l; }
+          else if (l && r && (l.addedAt || 0) > (r.addedAt || 0)) { toUpd[k] = l; }
+        });
+        if (Object.keys(toUpd).length > 0) return fbPatch(path, toUpd);
+        return null;
+      }).catch(function(e) {
+        console.error('[Uploader] syncUploadAll 物件 ' + key + ' 失敗', e);
+        return null;
+      });
+    }
+    return Promise.resolve();
+  }));
 }
 
 var Uploader = {
