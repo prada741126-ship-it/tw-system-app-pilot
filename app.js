@@ -1,5 +1,5 @@
-// [BUILD] v2.3.2_1787990000000
-window.TW_BUILD_VERSION = "v2.3.2_1787990000000";
+// [BUILD] v2.3.3_1787993600000
+window.TW_BUILD_VERSION = "v2.3.3_1787993600000";
 
 // [DEV BUILD] 測試環境 — 資料導向 taiwan_data_dev/，不污染正式資料
 window.TW_DEV_MODE = true;
@@ -1298,7 +1298,10 @@ if (typeof module !== 'undefined' && module.exports) {
  */
 
 // 代理级折抵计算
-function calcAgentQuota(agentId, memberTxs, bookings) {
+// opts.includeSealed: true → 封存團的洗碼/門檻「計入」達標計算（代理管理頁用）
+// 預設（false）→ 封存團不計入（帳務頁/房間頁維持原行為）
+function calcAgentQuota(agentId, memberTxs, bookings, opts) {
+  var includeSealed = !!(opts && opts.includeSealed);
   function _effectiveAgentId(t) {
     if (t.agentId) return t.agentId;
     if (typeof Trips !== 'undefined' && t.tripId) {
@@ -1307,16 +1310,18 @@ function calcAgentQuota(agentId, memberTxs, bookings) {
     }
     return '';
   }
-  // 過濾掉已封存團、或團已被墓碑刪除的交易/訂房
+  // 過濾掉團已被墓碑刪除的交易/訂房（一律不算入）
   // - 有 tripId 但 Trips.getById 找不到 → 團已被墓碑刪除 → 視為失效，不計入
-  function _isNotSealed(t) {
+  // - 封存團 → 僅代理管理頁（includeSealed）計入
+  function _isValid(t) {
     if (!t.tripId || typeof Trips === 'undefined') return true;
     var trip = Trips.getById(t.tripId);
     if (!trip) return false;
-    return trip.status !== 'sealed';
+    if (trip.status === 'sealed') return includeSealed;
+    return true;
   }
-  var agentTxs = (memberTxs || []).filter(function(t) { return _effectiveAgentId(t) === agentId && _isNotSealed(t); });
-  var agentBookings = (bookings || []).filter(function(b) { return _effectiveAgentId(b) === agentId && _isNotSealed(b); });
+  var agentTxs = (memberTxs || []).filter(function(t) { return _effectiveAgentId(t) === agentId && _isValid(t); });
+  var agentBookings = (bookings || []).filter(function(b) { return _effectiveAgentId(b) === agentId && _isValid(b); });
 
   var totalWash = agentTxs.reduce(function(s, t) { return s + (t.washCode || 0); }, 0);
   var totalThreshold = agentBookings.reduce(function(s, b) {
@@ -6218,7 +6223,8 @@ var PdfExport = (function() {
     var sh = Shareholders.getById(agent.shareholderId);
     var allMtxs = MemberTxs.getAll();
     var allBookings = Bookings.getAll();
-    var quota = calcAgentQuota(agent.id, allMtxs, allBookings);
+    // v2.3.3 與代理管理頁同口徑：達標計算含封存團
+    var quota = calcAgentQuota(agent.id, allMtxs, allBookings, { includeSealed: true });
     var pct = quota.totalThreshold > 0 ? Math.min(100, (quota.totalWashRaw / quota.totalThreshold) * 100) : 0;
     var totalSettle = txs.reduce(function(s, t) { return s + calcTotalNT(t); }, 0);
     var totalWash = txs.reduce(function(s, t) { return s + (t.washCode || 0); }, 0);
@@ -11498,7 +11504,9 @@ var AgentPage = (function() {
           }
           return effectiveAgentId === agent.id && notSealed(b);
         });
-        var quota = calcAgentQuota(agent.id, mtxs, bookings);
+        /* v2.3.3 達標計算含封存團（代理管理頁專用）：代理累積所有團（含封存）總洗碼後結算達標；
+         * 團已被墓碑刪除仍排除。帳務明細（agentTxs/agentBookings）維持排除封存團 */
+        var quota = calcAgentQuota(agent.id, mtxs, bookings, { includeSealed: true });
         var totalSettle = agentTxs.reduce(function(s, t) { return s + (t.totalSettlement || 0); }, 0);
         var pct = quota.totalThreshold > 0 ? Math.min(100, (quota.totalWashRaw / quota.totalThreshold) * 100) : 0;
         var isMonthlyOnly = (agent.profitMode || PROFIT_MODE.STANDARD) === PROFIT_MODE.MONTHLY_ONLY;
