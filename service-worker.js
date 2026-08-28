@@ -6,7 +6,7 @@
  *   - 其他 → stale-while-revalidate
  */
 
-var CACHE_VERSION = 'tw-app-v2.3.0';  /// 2026-08-28 v2.3.0 syncUploadAll 改為「先拉後合併差異上傳」，修復 APP/WEB 本地舊資料覆蓋雲端墓碑/新修改的同步根本缺陷
+var CACHE_VERSION = 'tw-app-v2.3.1';  /// 2026-08-28 v2.3.1 代理帳務頁排除封存團帳務 + 衝突偵測改三方比對（WEB 單方面編輯不再誤報衝突）
 var STATIC_CACHE = CACHE_VERSION + '-static';
 var RUNTIME_CACHE = CACHE_VERSION + '-runtime';
 
