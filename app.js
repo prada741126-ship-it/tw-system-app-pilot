@@ -1,5 +1,5 @@
-// [BUILD] v2.3.5_1788005000000
-window.TW_BUILD_VERSION = "v2.3.5_1788005000000";
+// [BUILD] v2.3.6_1788009600000
+window.TW_BUILD_VERSION = "v2.3.6_1788009600000";
 
 // [DEV BUILD] 測試環境 — 資料導向 taiwan_data_dev/，不污染正式資料
 window.TW_DEV_MODE = true;
@@ -3124,6 +3124,37 @@ function _setupWatchers() {
           }
         }
 
+        /* v2.3.6 孤兒 Bot 訂房自動綁團：Bot 寫入 tripId 恆為空，
+           用會員隸屬反查團補綁，讓房務明細/配額即時歸屬正確 */
+        if (w.key === 'BOOKINGS' && typeof Bookings !== 'undefined' && Bookings.bindOrphans) {
+          var orphanChanged = Bookings.bindOrphans(merged, State.get('trips') || []);
+          if (orphanChanged.length > 0) {
+            var oPayloads = {};
+            orphanChanged.forEach(function(b) { if (b._fbKey) oPayloads[b._fbKey] = b; });
+            if (Object.keys(oPayloads).length > 0 && typeof enqueue === 'function') {
+              enqueue(FB_PATH.BOOKINGS, oPayloads);
+            }
+            console.log('[Watchers] BOOKINGS orphan-bind:', orphanChanged.length);
+          }
+        }
+        /* v2.3.6 團建立/異動後回頭綁既有孤兒 Bot 訂房（先有訂房後建團的情境） */
+        if (w.key === 'TRIPS' && typeof Bookings !== 'undefined' && Bookings.bindOrphans) {
+          var bkArr = State.get('bookings') || [];
+          var orphanChanged2 = Bookings.bindOrphans(bkArr, merged);
+          if (orphanChanged2.length > 0) {
+            Store.writeArray(STORAGE_KEYS.BOOKINGS, bkArr);
+            State.set('bookings', bkArr);
+            EventBus.emit(EVENTS.BOOKINGS_LOADED, bkArr);
+            if (typeof updateSyncBaseline === 'function') updateSyncBaseline('bookings', bkArr);
+            var oPayloads2 = {};
+            orphanChanged2.forEach(function(b) { if (b._fbKey) oPayloads2[b._fbKey] = b; });
+            if (Object.keys(oPayloads2).length > 0 && typeof enqueue === 'function') {
+              enqueue(FB_PATH.BOOKINGS, oPayloads2);
+            }
+            console.log('[Watchers] TRIPS orphan-bind:', orphanChanged2.length);
+          }
+        }
+
         Store.writeArray(w.storeKey, merged);
         State.set(w.stateKey, merged);
         EventBus.emit(w.event, merged);
@@ -4750,7 +4781,36 @@ var Bookings = (function() {
     enqueue(FB_PATH.BOOKINGS, obj);
     EventBus.emit(EVENTS.BOOKING_DELETED, id);
   }
-  return { load: load, save: save, getAll: getAll, getById: getById, getByTrip: getByTrip, getByAgent: getByAgent, calcNights: calcNights, create: create, update: update, remove: remove };
+  /* v2.3.6 孤兒 Bot 訂房自動綁團：
+     Bot 建房 tripId 恆為空 → 房務頁選團檢視、配額結算、結帳歸屬都看不到該筆明細。
+     對帳規則（與 sealTrip 級聯綁定口徑一致：以會員隸屬為準，不看日期）：
+       - 無 tripId、未封存、未刪除的訂房，若其會員隸屬某未刪除的團 → 綁到該團
+       - 優先綁活躍（非 sealed）團；若只隸屬 sealed 團 → 綁並補 sealedAt（跟著封存）
+     回傳被修改的 bookings（呼叫端負責 save + enqueue 上傳） */
+  function bindOrphans(bookings, trips) {
+    var liveTrips = (trips || []).filter(function(t) { return t && !t._deleted; });
+    var changed = [];
+    (bookings || []).forEach(function(b) {
+      if (!b || b._deleted || b.tripId || b.sealedAt || !b.memberId) return;
+      var cands = liveTrips.filter(function(t) {
+        return (t.memberIds || []).indexOf(b.memberId) !== -1 &&
+               (!b.agentId || !t.agentId || t.agentId === b.agentId);
+      });
+      if (cands.length === 0) return;
+      var nonSealed = cands.filter(function(t) { return t.status !== 'sealed'; });
+      var pool = nonSealed.length > 0 ? nonSealed : cands;
+      var pick = pool[0];
+      for (var i = 1; i < pool.length; i++) {
+        if ((pool[i].createdAt || 0) > (pick.createdAt || 0)) pick = pool[i];
+      }
+      b.tripId = pick.id;
+      b._updatedAt = Date.now();
+      if (pick.status === 'sealed') b.sealedAt = pick.sealedAt || b._updatedAt;
+      changed.push(b);
+    });
+    return changed;
+  }
+  return { load: load, save: save, getAll: getAll, getById: getById, getByTrip: getByTrip, getByAgent: getByAgent, calcNights: calcNights, create: create, update: update, remove: remove, bindOrphans: bindOrphans };
 })();
 
 
