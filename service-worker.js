@@ -6,7 +6,7 @@
  *   - 其他 → stale-while-revalidate
  */
 
-var CACHE_VERSION = 'tw-app-v2.3.5';  /// 2026-08-29 v2.3.5 ①總覽頁 KPI 總洗碼不再被 filterActiveBookings 誤過濾（含封存團 1662.7萬）②member.js 代理面板 calcAgentQuota 補傳 includeSealed=true（達標計算與代理管理頁一致）
+var CACHE_VERSION = 'tw-app-v2.3.6';  /// 2026-08-29 v2.3.6 孤兒 Bot 訂房自動綁團：無 tripId 的 Bot 訂房以會員隸屬反查團補綁 tripId（BOOKINGS/TRIPS watcher 對帳），房務明細/配額歸屬即時正確
 var STATIC_CACHE = CACHE_VERSION + '-static';
 var RUNTIME_CACHE = CACHE_VERSION + '-runtime';
 
