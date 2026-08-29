@@ -1,5 +1,5 @@
-// [BUILD] v2.3.4_1788002400000
-window.TW_BUILD_VERSION = "v2.3.4_1788002400000";
+// [BUILD] v2.3.5_1788005000000
+window.TW_BUILD_VERSION = "v2.3.5_1788005000000";
 
 // [DEV BUILD] 測試環境 — 資料導向 taiwan_data_dev/，不污染正式資料
 window.TW_DEV_MODE = true;
@@ -6605,9 +6605,10 @@ var OverviewPage = (function() {
     var shareholders = Shareholders.getAll();
     var allMtxs = MemberTxs.getAll();
     var currentMonth = TWDate.monthStr();
-    /* KPI 與圖表口徑一致：本月 + 排除封存團（含 tripId 為空的 Bot 訂房代理反查） */
-    var mtxs = filterActiveBookings(allMtxs, trips).filter(function(t) {
-      return t.date && t.date.substring(0, 7) === currentMonth;
+    /* KPI 總洗碼：本月所有「活」帳務（含封存團的）—— 總覽視角看公司本月整體洗碼
+       （v1.6.1 的 filterActiveBookings 只適用於 bookings；mtxs 也有 tripId 會誤觸發過濾 → 整月全被濾為 0） */
+    var mtxs = allMtxs.filter(function(t) {
+      return !t._deleted && t.date && t.date.substring(0, 7) === currentMonth;
     });
     var bookings = Bookings.getAll();
     var settings = Settings.load();
@@ -7854,7 +7855,8 @@ var MemberPage = (function() {
       var agent = Agents.getById(_selectedAgent);
       if (!agent) { html += Icons.empty('代理不存在', '該代理可能已被刪除') + '</div>'; return html; }
       var sh = Shareholders.getById(agent.shareholderId);
-      var quota = calcAgentQuota(_selectedAgent, allMtxs, allBookings);
+      /* v2.3.5 達標計算含封存團（與 WEB / agent.js 同口徑）：代理累積所有團總洗碼後結算達標 */
+      var quota = calcAgentQuota(_selectedAgent, allMtxs, allBookings, { includeSealed: true });
       var pct = quota.totalThreshold > 0 ? Math.min(100, (quota.totalWashRaw / quota.totalThreshold) * 100) : 0;
       var agentTxs = tripMtxs; // 已經篩選過了
 
