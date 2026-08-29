@@ -1,5 +1,5 @@
 // [BUILD] v2.3.6_1788009600000
-window.TW_BUILD_VERSION = "v2.3.7_1788025200000";
+window.TW_BUILD_VERSION = "v2.3.8_1788030000000";
 
 // [DEV BUILD] 測試環境 — 資料導向 taiwan_data_dev/，不污染正式資料
 window.TW_DEV_MODE = true;
@@ -1744,11 +1744,12 @@ function _localModifiedSinceSync(collection, fbKey, lItem) {
   return sig !== _contentSig(lItem);
 }
 
-function mergeArray(local, remote) {
+function mergeArray(local, remote, collection) {
   var localArr = local || [];
   var remoteArr = remote || [];
   var map = {};
   var result = [];
+  var isTrips = collection === 'trips';
 
   localArr.forEach(function(item) {
     if (item && item._fbKey) map[item._fbKey] = item;
@@ -1770,7 +1771,17 @@ function mergeArray(local, remote) {
       }
       // 否则 map[rItem._fbKey] 已是 lItem (墓碑)
     } else {
-      // 两者都活着 → 时间戳决胜
+      // 两者都活着
+      if (isTrips) {
+        var lSealed = lItem.status === 'sealed';
+        var rSealed = rItem.status === 'sealed';
+        if (lSealed !== rSealed) {
+          // v2.3.8 封存保護：sealed 一方永远赢（封存不可逆，任何一端不得复原另一端已封存的团）
+          map[rItem._fbKey] = lSealed ? lItem : rItem;
+          return;
+        }
+      }
+      // → 时间戳决胜
       var lTs = lItem._updatedAt || 0;
       var rTs = rItem._updatedAt || 0;
       map[rItem._fbKey] = rTs >= lTs ? rItem : lItem;
@@ -1794,6 +1805,7 @@ function mergeArrayWithConflicts(local, remote, collection) {
   var map = {};
   var conflicts = [];
   var result = [];
+  var isTrips = collection === 'trips';
 
   localArr.forEach(function(item) {
     if (item && item._fbKey) map[item._fbKey] = item;
@@ -1819,8 +1831,22 @@ function mergeArrayWithConflicts(local, remote, collection) {
     // 两者都活着
     var lTs = lItem._updatedAt || 0;
     var rTs = rItem._updatedAt || 0;
-    var winner = rTs >= lTs ? 'remote' : 'local';
-    map[rItem._fbKey] = winner === 'remote' ? rItem : lItem;
+    var winner;
+    if (isTrips) {
+      var lSealed = lItem.status === 'sealed';
+      var rSealed = rItem.status === 'sealed';
+      if (lSealed !== rSealed) {
+        // v2.3.8 封存保護：sealed 一方永远赢（封存不可逆）
+        winner = lSealed ? 'local' : 'remote';
+        map[rItem._fbKey] = lSealed ? lItem : rItem;
+      } else {
+        winner = rTs >= lTs ? 'remote' : 'local';
+        map[rItem._fbKey] = winner === 'remote' ? rItem : lItem;
+      }
+    } else {
+      winner = rTs >= lTs ? 'remote' : 'local';
+      map[rItem._fbKey] = winner === 'remote' ? rItem : lItem;
+    }
     // 真衝突（v2.3.1 三方比對）：雲端內容 ≠ 本地，且本地自上次同步基準後也被改過
     // （WEB 單方面編輯 → 本地未改 → 只同步不報衝突）
     if (_dataDiffers(lItem, rItem) && _localModifiedSinceSync(collection, rItem._fbKey, lItem)) {
@@ -2085,6 +2111,9 @@ function syncUploadAll(dataMap) {
           } else if (item._deleted) {
             // 本地墓碑、雲端活資料 → 上傳墓碑，確保雲端執行刪除
             toUpload[item._fbKey] = item;
+          } else if (key === 'TRIPS' && rItem.status === 'sealed' && item.status !== 'sealed') {
+            // v2.3.8 封存保護：雲端已封存、本地是舊狀態 → 不得上傳覆蓋（封存不可逆）
+            return;
           } else if ((item._updatedAt || 0) > (rItem._updatedAt || 0)) {
             // 兩者皆活、本地較新 → 上傳
             toUpload[item._fbKey] = item;
@@ -7576,6 +7605,9 @@ var PendingPage = (function() {
     });
   }
 
+  // v2.3.8 團數據同步後自動刷新（WEB/APP 任一端封存 → 待結帳列表即時移除該團）
+  EventBus.on(EVENTS.TRIPS_LOADED, function() { render(); });
+
   return { render: render, sealTrip: sealTrip, revertTrip: revertTrip, toggleCard: toggleCard, showMemberDetail: showMemberDetail, shareTrip: shareTrip, buildShareText: buildShareText, shareText: _shareText };
 })();
 
@@ -7872,6 +7904,11 @@ var MemberPage = (function() {
 
   // 帳務數據同步後自動刷新
   EventBus.on(EVENTS.MTX_LOADED, function() {
+    if (Router.getCurrent() === 'member') render();
+  });
+
+  // v2.3.8 團數據同步後自動刷新（WEB 封存/建團/異動 → 帳務頁即時反映）
+  EventBus.on(EVENTS.TRIPS_LOADED, function() {
     if (Router.getCurrent() === 'member') render();
   });
 
@@ -10871,6 +10908,10 @@ var RoomPage = (function() {
     render();
   }
 
+  // v2.3.8 團/訂房數據同步後自動刷新（WEB 封存團 → 房務頁即時反映；選中團被封存會自動清除選擇）
+  EventBus.on(EVENTS.TRIPS_LOADED, function() { render(); });
+  EventBus.on(EVENTS.BOOKINGS_LOADED, function() { render(); });
+
   return {
     render: render, selectTrip: selectTrip,
     showAddBooking: showAddBooking, onCasinoChange: onCasinoChange, onHotelChange: onHotelChange,
@@ -11976,6 +12017,11 @@ var AgentPage = (function() {
 
   // 帳務數據同步後自動刷新
   EventBus.on(EVENTS.MTX_LOADED, function() {
+    if (Router.getCurrent() === 'agent') render();
+  });
+
+  // v2.3.8 團數據同步後自動刷新（封存/建團異動 → 代理面板即時反映）
+  EventBus.on(EVENTS.TRIPS_LOADED, function() {
     if (Router.getCurrent() === 'agent') render();
   });
 
@@ -15218,7 +15264,7 @@ var MobileSync = (function() {
       FirebaseSync.once(path).then(function(remoteVal) {
         var remote = remoteVal ? Object.values(remoteVal) : [];
         var local = Store.readArray(cfg.storeKey);
-        var merged = mergeArray(local, remote);
+        var merged = mergeArray(local, remote, cfg.stateKey);
 
         // MEMBER_TXS 重新計算衍生欄位
         if (cfg.fbKey === 'MEMBER_TXS' && typeof calcMemberTx === 'function') {
