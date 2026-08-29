@@ -6,7 +6,7 @@
  *   - 其他 → stale-while-revalidate
  */
 
-var CACHE_VERSION = 'tw-app-v2.3.7';  /// 2026-08-29 v2.3.7 帳務頁「團歸團」: calcAgentQuota 新增 tripId 過濾參數，帳務頁只算當前選中團不混入代理其他團；代理管理頁仍看整個代理所有團累計
+var CACHE_VERSION = 'tw-app-v2.3.8';  /// 2026-08-29 v2.3.8 WEB封存同步修復：①merger 封存保護（trips 一端 sealed 永遠贏，任何一端舊狀態不得把雲端已封存團復原）②syncUploadAll 不上傳舊狀態覆蓋雲端封存 ③帳務/待結帳/代理/房務/股東頁補 TRIPS_LOADED 即時重渲染（封存後畫面立即反映）
 var STATIC_CACHE = CACHE_VERSION + '-static';
 var RUNTIME_CACHE = CACHE_VERSION + '-runtime';
 
