@@ -6,7 +6,7 @@
  *   - 其他 → stale-while-revalidate
  */
 
-var CACHE_VERSION = 'tw-app-v2.3.6';  /// 2026-08-29 v2.3.6 孤兒 Bot 訂房自動綁團：無 tripId 的 Bot 訂房以會員隸屬反查團補綁 tripId（BOOKINGS/TRIPS watcher 對帳），房務明細/配額歸屬即時正確
+var CACHE_VERSION = 'tw-app-v2.3.7';  /// 2026-08-29 v2.3.7 帳務頁「團歸團」: calcAgentQuota 新增 tripId 過濾參數，帳務頁只算當前選中團不混入代理其他團；代理管理頁仍看整個代理所有團累計
 var STATIC_CACHE = CACHE_VERSION + '-static';
 var RUNTIME_CACHE = CACHE_VERSION + '-runtime';
 
