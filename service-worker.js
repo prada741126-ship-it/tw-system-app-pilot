@@ -6,7 +6,7 @@
  *   - 其他 → stale-while-revalidate
  */
 
-var CACHE_VERSION = 'tw-app-v2.3.4';  /// 2026-08-29 v2.3.4 ①錢包衍生流水墓碑不得由對帳重建（刪除不復活）；刪團級聯刪預支單 ②結帳封存級聯綁定該團訂房（房務明細跟著封存）；強制全量同步補齊錢包/預支/借支
+var CACHE_VERSION = 'tw-app-v2.3.5';  /// 2026-08-29 v2.3.5 ①總覽頁 KPI 總洗碼不再被 filterActiveBookings 誤過濾（含封存團 1662.7萬）②member.js 代理面板 calcAgentQuota 補傳 includeSealed=true（達標計算與代理管理頁一致）
 var STATIC_CACHE = CACHE_VERSION + '-static';
 var RUNTIME_CACHE = CACHE_VERSION + '-runtime';
 
