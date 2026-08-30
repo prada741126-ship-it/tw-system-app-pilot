@@ -6,7 +6,7 @@
  *   - 其他 → stale-while-revalidate
  */
 
-var CACHE_VERSION = 'tw-app-v2.4.6';  /// 2026-08-30 v2.4.6 美工強化：logo 透明化升級（移除暗色 halo，邊緣更乾淨）+ WEB 左側導航欄 logo 同款處理。同 WEB v1.7.7
+var CACHE_VERSION = 'tw-app-v2.4.7';  /// 2026-08-30 v2.4.7 美工強化 v6：登入 logo 暗部色彩替換成深藍色（消除「一眼假」感）+ 側邊欄 logo 保留 v3 純透明化（金屬感）。同 WEB v1.7.8
 var STATIC_CACHE = CACHE_VERSION + '-static';
 var RUNTIME_CACHE = CACHE_VERSION + '-runtime';
 
