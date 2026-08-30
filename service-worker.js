@@ -6,7 +6,7 @@
  *   - 其他 → stale-while-revalidate
  */
 
-var CACHE_VERSION = 'tw-app-v2.4.4';  /// 2026-08-30 v2.4.4 緊急美工：登入背景換古銅暖色深色（去藍光暈+加銅暈）與博盈圖標色系完全呼應；sidebar 圖標 140→180 填滿。同 WEB v1.7.5
+var CACHE_VERSION = 'tw-app-v2.4.5';  /// 2026-08-30 v2.4.5 緊急美工修正：logo 黑底透明化（保留龍/銅錢/博盈字原色）+ 還原登入背景為原本的深藍色系（撤銷 v2.4.4 的古銅背景）。同 WEB v1.7.6
 var STATIC_CACHE = CACHE_VERSION + '-static';
 var RUNTIME_CACHE = CACHE_VERSION + '-runtime';
 
@@ -19,6 +19,8 @@ var STATIC_ASSETS = [
   './version.json',
   './icons/icon-192.png',
   './icons/icon-512.png',
+  './icons/brand-360.png',
+  './icons/brand-240.png',
   './icons/splash-1290x2796.png',
   './icons/splash-1284x2778.png',
   './icons/splash-1179x2556.png',
