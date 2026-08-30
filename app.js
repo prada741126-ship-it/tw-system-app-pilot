@@ -1,8 +1,25 @@
-// [BUILD] v2.4.2_1788071150
-window.TW_BUILD_VERSION = "v2.4.2_1788071150";
+// [BUILD] v2.4.3_1788074243
+window.TW_BUILD_VERSION = "v2.4.3_1788074243";
 
 // [DEV BUILD] 測試環境 — 資料導向 taiwan_data_dev/，不污染正式資料
 window.TW_DEV_MODE = true;
+
+// === icons.js — 全站 SVG 圖示系統（P3-3，與 WEB src/ui/icons.js 同款同內容） ===
+(function () {
+  function ic(path) {
+    return '<svg class="ic" viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + path + '</svg>';
+  }
+  window.ICONS = {
+    check: ic('<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="M22 4L12 14.01l-3-3"/>'),
+    alert: ic('<path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><path d="M12 9v4"/><path d="M12 17h.01"/>'),
+    chart: ic('<path d="M3 3v18h18"/><path d="M8 17v-5"/><path d="M13 17V8"/><path d="M18 17v-3"/>'),
+    calendar: ic('<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h18"/>'),
+    file: ic('<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/>'),
+    save: ic('<path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/>'),
+    gear: ic('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>'),
+    edit: ic('<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>')
+  };
+})();
 
 // === src/core/constants.js ===
 /**
@@ -6384,7 +6401,7 @@ var PdfExport = (function() {
     html += '<div class="quota-info">';
     html += '<span>總洗碼: ' + quota.totalWashCode.toFixed(2) + ' 萬</span>';
     html += '<span>總門檻: ' + (quota.totalThreshold / 10000).toFixed(0) + ' 萬</span>';
-    html += '<span class="' + (quota.isMet ? 'met' : 'unmet') + '">' + (quota.isMet ? '✅ 達標' : '⚠️ 未達標') + '</span>';
+    html += '<span class="' + (quota.isMet ? 'met' : 'unmet') + '">' + (quota.isMet ? ICONS.check + ' 達標' : ICONS.alert + ' 未達標') + '</span>';
     html += '</div>';
     var qc = quota.isMet ? '#27ae60' : (pct < 50 ? '#3498db' : '#e67e22');
     html += '<div class="quota-bar"><div class="quota-fill" style="width:' + pct + '%;background:' + qc + ';"></div></div>';
@@ -7984,7 +8001,7 @@ var MemberPage = (function() {
       html += '<div class="mb-ap-quota-info">';
       html += '<span>總洗碼: ' + quota.totalWashCode.toFixed(2) + ' 萬</span>';
       html += '<span>總門檻: ' + (quota.totalThreshold / 10000).toFixed(0) + ' 萬</span>';
-      html += '<span class="' + (quota.isMet ? 'text-success' : 'text-warning') + '">' + (!quota.hasBookings ? '— 無訂房' : (quota.isMet ? '✅ 達標' : '⚠️ 未達標')) + '</span>';
+      html += '<span class="' + (quota.isMet ? 'text-success' : 'text-warning') + '">' + (!quota.hasBookings ? '— 無訂房' : (quota.isMet ? ICONS.check + ' 達標' : ICONS.alert + ' 未達標')) + '</span>';
       html += '</div>';
       html += '<div style="display:flex;align-items:center;"><div class="mb-ap-quota-bar" class="flex-1"><div class="mb-ap-quota-fill" style="width:' + pct + '%;' + (quota.isMet ? '' : (pct < 50 ? 'background:var(--accent);' : 'background:var(--warning);')) + '"></div></div><span class="mb-ap-quota-pct">' + pct.toFixed(1) + '%</span></div>';
       html += '</div>';
@@ -9165,7 +9182,7 @@ var WalletPage = (function() {
     html += '<div class="wallet-balance-card' + (bal < 0 ? ' neg' : '') + '">';
     html += '<div class="wallet-balance-label">港幣現鈔餘額</div>';
     html += '<div class="wallet-balance-num">HK$ ' + fmtHK(bal) + '</div>';
-    if (bal < 0) html += '<div class="wallet-balance-warn">⚠ 餘額為負，請立即對帳</div>';
+    if (bal < 0) html += '<div class="wallet-balance-warn">' + ICONS.alert + ' 餘額為負，請立即對帳</div>';
     html += '</div>';
 
     html += '<div class="wallet-summary">';
@@ -10158,7 +10175,7 @@ var RoomPage = (function() {
       html += '<td>' + (agent ? agent.name : aid) + '</td>';
       html += '<td class="num">' + quota.totalWashCode.toFixed(0) + '</td>';
       html += '<td class="num">' + (quota.totalThreshold / 10000).toFixed(0) + '萬</td>';
-      html += '<td>' + (!quota.hasBookings ? '<span class="text-muted">— 無訂房</span>' : (quota.isMet ? '<span class="text-success-strong">✅ 達標</span>' : '<span class="text-danger-strong">未達標</span>')) + '</td>';
+      html += '<td>' + (!quota.hasBookings ? '<span class="text-muted">— 無訂房</span>' : (quota.isMet ? '<span class="text-success-strong">' + ICONS.check + ' 達標</span>' : '<span class="text-danger-strong">未達標</span>')) + '</td>';
       var barColor = quota.isMet ? 'var(--success)' : (pct < 50 ? 'var(--accent)' : 'var(--warning)');
       html += '<td>';
       html += '<div style="display:flex;align-items:center;gap:10px;min-width:180px;">';
@@ -10214,7 +10231,7 @@ var RoomPage = (function() {
       'checked-in': '<span class="badge badge-info">已入住</span>',
       'checked-out': '<span class="badge badge-success">已退房</span>',
       'cancelled': '<span class="badge badge-danger">已取消</span>',
-      'overdue-checkout': '<span class="badge badge-danger" title="已過退房日但未手動退房">⚠️ 逾期未退</span>',
+      'overdue-checkout': '<span class="badge badge-danger" title="已過退房日但未手動退房">' + ICONS.alert + ' 逾期未退</span>',
     };
     return map[status] || status;
   }
@@ -11684,7 +11701,7 @@ var AgentPage = (function() {
         html += '<div class="quota-info">';
         html += '<span>總洗碼: ' + quota.totalWashCode.toFixed(2) + ' 萬</span>';
         html += '<span>總門檻: ' + (quota.totalThreshold / 10000).toFixed(0) + ' 萬</span>';
-        html += '<span class="' + (quota.isMet ? 'text-success' : 'text-warning') + '">' + (!quota.hasBookings ? '— 無訂房' : (quota.isMet ? '✅ 達標' : '⚠️ 未達標')) + '</span>';
+        html += '<span class="' + (quota.isMet ? 'text-success' : 'text-warning') + '">' + (!quota.hasBookings ? '— 無訂房' : (quota.isMet ? ICONS.check + ' 達標' : ICONS.alert + ' 未達標')) + '</span>';
         html += '</div>';
         html += '<div style="display:flex;align-items:center;"><div class="quota-bar" class="flex-1"><div class="quota-fill" style="width:' + pct + '%;' + (quota.isMet ? '' : (pct < 50 ? 'background:var(--accent);' : 'background:var(--warning);')) + '"></div></div><span class="quota-pct">' + pct.toFixed(1) + '%</span></div>';
         html += '</div>';
@@ -11897,7 +11914,7 @@ var AgentPage = (function() {
     }
 
     var halls = getMonthlyRebateHalls();
-    var html = '<strong>📊 分潤預覽</strong><br>';
+    var html = '<strong>' + ICONS.chart + ' 分潤預覽</strong><br>';
     html += '<span class="text-danger">●</span> 現結（盈利）：全退代理，不進錢池<br>';
     html += '<span class="text-success">●</span> 月退費：用下方費率進錢池，由所有股東依持股均分<br>';
     html += '<span style="color:var(--warning);">●</span> 洗碼：計入總洗碼，但不計入所屬股東個人貢獻<br>';
@@ -12761,7 +12778,7 @@ var MembersMgmtPage = (function() {
       var sh = Shareholders.getById(m.shareholderId);
       var kw = [m.name, m.id, m.casinoId, agent ? agent.name : '', sh ? sh.name : ''].join(' ').toLowerCase();
       html += '<div class="m-card" data-sh="' + m.shareholderId + '" data-agent="' + m.agentId + '" data-status="' + m.status + '" data-kw="' + escAttr(kw) + '">';
-      html += '<div class="m-card-head"><span class="m-card-title">' + esc(m.name || '(未命名)') + '</span><span>' + (m.status === 'complete' ? '✅ 已完成' : '📝 草稿') + '</span></div>';
+      html += '<div class="m-card-head"><span class="m-card-title">' + esc(m.name || '(未命名)') + '</span><span>' + (m.status === 'complete' ? ICONS.check + ' 已完成' : ICONS.edit + ' 草稿') + '</span></div>';
       html += '<div class="m-card-grid">';
       html += '<div><div class="k">會員ID</div><div class="v">' + esc(m.id) + '</div></div>';
       html += '<div><div class="k">賭場編號</div><div class="v">' + esc(m.casinoId || '-') + '</div></div>';
@@ -12797,7 +12814,7 @@ var MembersMgmtPage = (function() {
       html += '<td>' + (m.rebate1 || 0) + '</td>';
       html += '<td>' + (m.rate2 || 0) + '</td>';
       html += '<td>' + (m.rebate2 || 0) + '</td>';
-      html += '<td>' + (m.status === 'complete' ? '✅' : '📝草稿') + '</td>';
+      html += '<td>' + (m.status === 'complete' ? ICONS.check : ICONS.edit + '草稿') + '</td>';
       html += '<td><button class="btn-sm" onclick="MembersMgmtPage.editMember(\'' + m.id + '\')">編輯</button> ';
       html += '<button class="btn-sm btn-danger" onclick="MembersMgmtPage.delMember(\'' + m.id + '\')">刪</button></td>';
       html += '</tr>';
@@ -13050,7 +13067,7 @@ var HistoryPage = (function() {
       // 一級折疊：月份分組
       html += '<div class="ht-month-group st-collapsible' + (isMonthOpen ? '' : ' st-collapsed') + '">';
       html += '<div class="ht-month-header st-collapsible-header" onclick="HistoryPage.toggleMonth(\'' + month + '\')">';
-      html += '<span class="ht-month-icon">📅</span>';
+      html += '<span class="ht-month-icon">' + ICONS.calendar + '</span>';
       html += '<span class="ht-month-title">' + month + '</span>';
       html += '<span class="ht-month-stats">';
       html += trips.length + ' 團 · 會員 ' + monthMemberCnt + ' · 訂房 ' + monthBookings + ' 晚';
@@ -14117,7 +14134,7 @@ var ReportsPage = (function() {
 
     // 代理明細
     html += '<div class="rpt-card" onclick="ReportsPage.exportAgentList()">';
-    html += '<div class="rpt-icon">📋</div>';
+    html += '<div class="rpt-icon">' + ICONS.file + '</div>';
     html += '<div class="rpt-info">';
     html += '<div class="rpt-title">代理明細</div>';
     html += '<div class="rpt-desc">各代理的會員帳卡明細 + 房間記錄</div>';
@@ -14127,7 +14144,7 @@ var ReportsPage = (function() {
 
     // 股東全覽
     html += '<div class="rpt-card" onclick="ReportsPage.exportShareholderList()">';
-    html += '<div class="rpt-icon">📊</div>';
+    html += '<div class="rpt-icon">' + ICONS.chart + '</div>';
     html += '<div class="rpt-info">';
     html += '<div class="rpt-title">股東全覽</div>';
     html += '<div class="rpt-desc">全部代理明細彙整（按股東分組）</div>';
@@ -14145,7 +14162,7 @@ var ReportsPage = (function() {
 
     // 匯出備份
     html += '<div class="rpt-card" onclick="ReportsPage.exportBackup()">';
-    html += '<div class="rpt-icon">💾</div>';
+    html += '<div class="rpt-icon">' + ICONS.save + '</div>';
     html += '<div class="rpt-info">';
     html += '<div class="rpt-title">匯出備份</div>';
     html += '<div class="rpt-desc">全部資料打包匯出（可跨裝置匯入）</div>';
