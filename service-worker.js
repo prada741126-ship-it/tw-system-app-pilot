@@ -6,7 +6,7 @@
  *   - 其他 → stale-while-revalidate
  */
 
-var CACHE_VERSION = 'tw-app-v2.4.1';  /// 2026-08-30 v2.4.1 美工 P2-A 四頁（與 WEB v1.7.2 同款）：①登入玻璃擬態升級（光暈/模糊24/入場動畫/按鈕漸層陰影）②總覽圖表卡 hover+標題色條+柱狀漸層/快捷卡 icon 反色③帳務卡漸層標頭+區塊色條+子表/代理表斑馬紋④待結帳折疊箭頭+警示左條+漸層 Modal 頭
+var CACHE_VERSION = 'tw-app-v2.4.2';  /// 2026-08-30 v2.4.2 美工 P2-B 六項（與 WEB v1.7.3 同款）：①歷史月份標題 sticky 漸層+折疊箭頭②設定門檻卡卡片化+設定卡摺疊箭頭③待結帳/歷史/設定統一 CSS 箭頭（隱藏舊 ▼ 字元）④手機版表格緊緻化（卡片內橫向捲動/min-width 440/520）⑤待結帳手機按鈕全寬⑥st-threshold-item hover 浮起
 var STATIC_CACHE = CACHE_VERSION + '-static';
 var RUNTIME_CACHE = CACHE_VERSION + '-runtime';
 
