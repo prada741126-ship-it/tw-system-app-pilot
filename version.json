@@ -1,11 +1,12 @@
 {
-  "version": "v2.3.3_1787993600000",
-  "buildTime": 1787993600000,
-  "date": "2026-08-28",
+  "version": "v2.4.0_1788068318",
+  "buildTime": 1788068318,
+  "date": "2026-08-30",
   "dataRoot": "taiwan_data/pilot",
   "notes": [
-    "代理管理頁達標計算含封存團：代理累積所有團（含封存）總洗碼後結算是否達標",
-    "帳務頁/房間頁帳務明細維持排除封存團（團歸團）",
-    "墓碑團（已刪除）的資料一律不計入"
+    "P1 共用元件打磨（與 WEB v1.7.1 同款）：按鈕全狀態/卡片 border/sticky 表頭/select 自訂箭頭",
+    "Toast 加 SVG 圖示 + 左色條；KPI 數字滾動動畫（animateKpis）",
+    "配額條三色（達標綠 / 未達標<50% 藍 / 未達標≥50% 黃），含 PDF 匯出",
+    "Modal 進場動畫 + radius-xl + close hover；登入 focus 金暈；--warning-dark token"
   ]
 }
