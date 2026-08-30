@@ -6,7 +6,7 @@
  *   - 其他 → stale-while-revalidate
  */
 
-var CACHE_VERSION = 'tw-app-v2.4.3';  /// 2026-08-30 v2.4.3 美工 P3（與 WEB v1.7.4 同款）：①SVG 圖示系統上線：達標/警示/圖表/月曆/檔案/儲存/齒輪/編輯 8 款替換全站 emoji（✅⚠️📊📅📋💾📝⚙），stroke 1.8 圓角端點 1em currentColor ②.ic 共用規則（垂直對齊/不縮放）
+var CACHE_VERSION = 'tw-app-v2.4.4';  /// 2026-08-30 v2.4.4 緊急美工：登入背景換古銅暖色深色（去藍光暈+加銅暈）與博盈圖標色系完全呼應；sidebar 圖標 140→180 填滿。同 WEB v1.7.5
 var STATIC_CACHE = CACHE_VERSION + '-static';
 var RUNTIME_CACHE = CACHE_VERSION + '-runtime';
 
