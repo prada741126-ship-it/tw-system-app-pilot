@@ -6,7 +6,7 @@
  *   - 其他 → stale-while-revalidate
  */
 
-var CACHE_VERSION = 'tw-app-v2.3.8';  /// 2026-08-29 v2.3.8 WEB封存同步修復：①merger 封存保護（trips 一端 sealed 永遠贏，任何一端舊狀態不得把雲端已封存團復原）②syncUploadAll 不上傳舊狀態覆蓋雲端封存 ③帳務/待結帳/代理/房務/股東頁補 TRIPS_LOADED 即時重渲染（封存後畫面立即反映）
+var CACHE_VERSION = 'tw-app-v2.3.9';  /// 2026-08-30 v2.3.9 三項兩端對齊：①WEB 達標判定統一（calcAgentQuota hasBookings，APP 版已是）②股東分潤頁補 TRIPS_LOADED 監聽（與 WEB 對齊，封存團即時消失）③WEB 移植衝突偵測（mergeArrayWithConflicts + 三方比對基準 + 設定頁同步衝突卡片）
 var STATIC_CACHE = CACHE_VERSION + '-static';
 var RUNTIME_CACHE = CACHE_VERSION + '-runtime';
 
