@@ -1,5 +1,5 @@
-// [BUILD] v2.3.9_1788067000000
-window.TW_BUILD_VERSION = "v2.3.9_1788067000000";
+// [BUILD] v2.4.0_1788068318
+window.TW_BUILD_VERSION = "v2.4.0_1788068318";
 
 // [DEV BUILD] 測試環境 — 資料導向 taiwan_data_dev/，不污染正式資料
 window.TW_DEV_MODE = true;
@@ -5832,13 +5832,25 @@ var Icons = (function() {
  * 依赖: 无
  */
 var Toast = (function() {
+  var ICONS = {
+    info: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6.5"/><path d="M8 7.5v4"/><path d="M8 4.8h.01"/></svg>',
+    success: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5l3.5 3.5L13 4.5"/></svg>',
+    error: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg>',
+    warning: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3l6 10.5H2L8 3z"/><path d="M8 7v3"/><path d="M8 11.5h.01"/></svg>'
+  };
   function show(msg, type, duration) {
     var container = document.getElementById('toast-container');
     if (!container) return;
     var t = document.createElement('div');
     t.className = 'toast toast-' + (type || 'info');
-    t.textContent = msg;
-    // v1.7.0 點擊關閉 + error 常駐直到點擊
+    var icon = document.createElement('span');
+    icon.className = 'toast-icon';
+    icon.innerHTML = ICONS[type] || ICONS.info;
+    t.appendChild(icon);
+    var text = document.createElement('span');
+    text.textContent = msg;
+    t.appendChild(text);
+    // v2.4.0 點擊關閉 + error 常駐直到點擊
     t.style.cursor = 'pointer';
     var removed = false;
     function remove() {
@@ -6374,7 +6386,8 @@ var PdfExport = (function() {
     html += '<span>總門檻: ' + (quota.totalThreshold / 10000).toFixed(0) + ' 萬</span>';
     html += '<span class="' + (quota.isMet ? 'met' : 'unmet') + '">' + (quota.isMet ? '✅ 達標' : '⚠️ 未達標') + '</span>';
     html += '</div>';
-    html += '<div class="quota-bar"><div class="quota-fill" style="width:' + pct + '%;"></div></div>';
+    var qc = quota.isMet ? '#27ae60' : (pct < 50 ? '#3498db' : '#e67e22');
+    html += '<div class="quota-bar"><div class="quota-fill" style="width:' + pct + '%;background:' + qc + ';"></div></div>';
     html += '</div>';
 
     // 會員匯總表
@@ -7973,7 +7986,7 @@ var MemberPage = (function() {
       html += '<span>總門檻: ' + (quota.totalThreshold / 10000).toFixed(0) + ' 萬</span>';
       html += '<span class="' + (quota.isMet ? 'text-success' : 'text-warning') + '">' + (!quota.hasBookings ? '— 無訂房' : (quota.isMet ? '✅ 達標' : '⚠️ 未達標')) + '</span>';
       html += '</div>';
-      html += '<div style="display:flex;align-items:center;"><div class="mb-ap-quota-bar" class="flex-1"><div class="mb-ap-quota-fill" style="width:' + pct + '%;' + (quota.isMet ? '' : 'background:var(--warning);background:linear-gradient(90deg,var(--warning),var(--warning));') + '"></div></div><span class="mb-ap-quota-pct">' + pct.toFixed(1) + '%</span></div>';
+      html += '<div style="display:flex;align-items:center;"><div class="mb-ap-quota-bar" class="flex-1"><div class="mb-ap-quota-fill" style="width:' + pct + '%;' + (quota.isMet ? '' : (pct < 50 ? 'background:var(--accent);' : 'background:var(--warning);')) + '"></div></div><span class="mb-ap-quota-pct">' + pct.toFixed(1) + '%</span></div>';
       html += '</div>';
 
       // 會員匯總表（同一會員多筆合併顯示總交收）
@@ -10146,7 +10159,7 @@ var RoomPage = (function() {
       html += '<td class="num">' + quota.totalWashCode.toFixed(0) + '</td>';
       html += '<td class="num">' + (quota.totalThreshold / 10000).toFixed(0) + '萬</td>';
       html += '<td>' + (!quota.hasBookings ? '<span class="text-muted">— 無訂房</span>' : (quota.isMet ? '<span class="text-success-strong">✅ 達標</span>' : '<span class="text-danger-strong">未達標</span>')) + '</td>';
-      var barColor = quota.isMet ? 'var(--success)' : 'var(--danger)';
+      var barColor = quota.isMet ? 'var(--success)' : (pct < 50 ? 'var(--accent)' : 'var(--warning)');
       html += '<td>';
       html += '<div style="display:flex;align-items:center;gap:10px;min-width:180px;">';
       html += '<div class="quota-bar" class="flex-1"><div class="quota-fill" style="width:' + pct + '%;background:' + barColor + ';"></div></div>';
@@ -11673,7 +11686,7 @@ var AgentPage = (function() {
         html += '<span>總門檻: ' + (quota.totalThreshold / 10000).toFixed(0) + ' 萬</span>';
         html += '<span class="' + (quota.isMet ? 'text-success' : 'text-warning') + '">' + (!quota.hasBookings ? '— 無訂房' : (quota.isMet ? '✅ 達標' : '⚠️ 未達標')) + '</span>';
         html += '</div>';
-        html += '<div style="display:flex;align-items:center;"><div class="quota-bar" class="flex-1"><div class="quota-fill" style="width:' + pct + '%;' + (quota.isMet ? '' : 'background:var(--warning);') + '"></div></div><span class="quota-pct">' + pct.toFixed(1) + '%</span></div>';
+        html += '<div style="display:flex;align-items:center;"><div class="quota-bar" class="flex-1"><div class="quota-fill" style="width:' + pct + '%;' + (quota.isMet ? '' : (pct < 50 ? 'background:var(--accent);' : 'background:var(--warning);')) + '"></div></div><span class="quota-pct">' + pct.toFixed(1) + '%</span></div>';
         html += '</div>';
 
         // 统计
@@ -14445,6 +14458,39 @@ function exposeGlobals() {
  * 依赖: bridge/bridge.js, core/schema.js, core/auth.js, core/permissions.js, core/constants.js, core/events.js, core/router.js, core/state.js, core/store.js, data/agents.js, data/auditLog.js, data/bookings.js, data/extraIncome.js, data/hotelConfig.js, data/memberTxs.js, data/members.js, data/settings.js, data/shareholders.js, data/supplements.js, data/trips.js, data/users.js, pages/agent.js, pages/auditLog.js, pages/fees.js, pages/history.js, pages/member.js, pages/membersMgmt.js, pages/overview.js, pages/pending.js, pages/profit.js, pages/reports.js, pages/room.js, pages/settings.js, pages/shareholder.js, sync/backup.js, sync/conflicts.js, sync/firebase.js, sync/recentlyDeleted.js, sync/uploader.js, sync/watchers.js, ui/keyboard.js, ui/toast.js
  */
 
+// v2.4.0 P1：KPI 數字滾動動畫（與 WEB v1.7.0 同款）
+function animateKpis(root) {
+  if (!root || !root.querySelectorAll) return;
+  var els = root.querySelectorAll('.kpi-value');
+  for (var i = 0; i < els.length; i++) {
+    (function(el) {
+      var txt = el.textContent || '';
+      var m = txt.match(/[\d,]+(\.\d+)?/);
+      if (!m) return; // 非數字（如「--」）略過
+      var target = parseFloat(m[0].replace(/,/g, ''));
+      if (isNaN(target)) return;
+      var prefix = txt.slice(0, txt.indexOf(m[0]));
+      var suffix = txt.slice(txt.indexOf(m[0]) + m[0].length);
+      var dec = (m[0].split('.')[1] || '').length;
+      var dur = 600, start = null;
+      function fmt(v) {
+        var s = v.toFixed(dec);
+        var parts = s.split('.');
+        parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+        return prefix + parts.join('.') + suffix;
+      }
+      function frame(ts) {
+        if (!start) start = ts;
+        var p = Math.min((ts - start) / dur, 1);
+        var eased = 1 - Math.pow(1 - p, 3);
+        el.textContent = fmt(target * eased);
+        if (p < 1) requestAnimationFrame(frame);
+      }
+      requestAnimationFrame(frame);
+    })(els[i]);
+  }
+}
+
 function onPageChange(pageName) {
   var renderMap = {
     'overview':    function() { OverviewPage.render(); },
@@ -14464,6 +14510,11 @@ function onPageChange(pageName) {
   };
   if (renderMap[pageName]) {
     try { renderMap[pageName](); } catch(e) { console.error('[App] render ' + pageName, e); }
+    /* v2.4.0 P1：KPI 數字滾動動畫（render 完成後觸發，與 WEB 同款） */
+    setTimeout(function() {
+      var active = document.querySelector('.page-section.active');
+      if (active) animateKpis(active);
+    }, 60);
   }
 }
 
