@@ -1,8 +1,7 @@
 {
-  "version": "v2.4.3_1788074243",
-  "buildTime": 1788074243,
+  "version": "v2.4.4_1788077661",
+  "buildTime": 1788077661,
   "date": "2026-08-30",
   "dataRoot": "taiwan_data/pilot",
-  "devMode": true,
-  "notes": "P3 動效與細節：SVG 圖示系統上線（8 款圖示替換全站 emoji）、.ic 共用規則；與 WEB v1.7.4 同款"
+  "notes": "v2.4.4 緊急美工：登入背景換古銅暖色深色（與博盈圖標色系完全呼應，移除藍光暈）；sidebar 圖標 140→180 填滿。同 WEB v1.7.5。"
 }
