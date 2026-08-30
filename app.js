@@ -1,5 +1,5 @@
 // [BUILD] v2.4.8_1788104698
-window.TW_BUILD_VERSION = "v2.4.9_1788105235";
+window.TW_BUILD_VERSION = "v2.4.10_1788106091";
 
 // [DEV BUILD] 測試環境 — 資料導向 taiwan_data_dev/，不污染正式資料
 window.TW_DEV_MODE = true;
@@ -7733,7 +7733,10 @@ var MemberPage = (function() {
       } else if (trip && trip.status === TRIP_STATUS.PENDING_SETTLEMENT) {
         html += '<div class="mark-pending-bar">';
         html += '<span style="font-size:13px;color:var(--warning);align-self:center;">此團已送入待結帳，帳務已鎖定。</span>';
-        html += '<button class="btn btn-secondary" onclick="MemberPage.revertPending(\'' + _selectedTrip + '\')">撤回待結帳 · 重新編輯</button>';
+        // v2.4.10 員工僅送件權限：撤回待結帳限會計/管理員（具 pending write）
+        if (typeof Perm === 'undefined' || !Perm.hasSession() || Perm.can('pending', 'write')) {
+          html += '<button class="btn btn-secondary" onclick="MemberPage.revertPending(\'' + _selectedTrip + '\')">撤回待結帳 · 重新編輯</button>';
+        }
         html += '</div>';
       }
       // v2.1 預支開銷區（先買先記，收工後帶入帳務）
@@ -9048,6 +9051,11 @@ var MemberPage = (function() {
 
   // v1.9.11 撤回待結帳：退回帳務頁恢復可編輯（計算錯誤時用；封存＝雙方確認才不可逆）
   function revertPending(tripId) {
+    // v2.4.10 員工僅送件權限：撤回待結帳需 pending 寫入權限（會計/管理員）
+    if (typeof Perm !== 'undefined' && Perm.hasSession() && !Perm.can('pending', 'write')) {
+      Toast.error('您的角色無權撤回待結帳，請聯絡會計或管理員');
+      return;
+    }
     Modal.confirm('將團 ' + tripId + ' 撤回帳務頁？\n撤回後帳務恢復可編輯，修正後需再次「傳帳給上級」。', function() {
       var ok = Trips.revertPending(tripId);
       Toast[ok ? 'success' : 'error'](ok ? '團 ' + tripId + ' 已撤回，可重新編輯帳務' : '撤回失敗（此團不在待結帳狀態）');
@@ -13612,7 +13620,7 @@ var SettingsPage = (function() {
             '（<span class="text-secondary">' + esc(Perm.roleLabel(me.role)) + '</span>）' +
             (offline ? ' <span class="text-warning text-sm">離線登入</span>' : '') +
             '</div></div>';
-    html += '<div class="form-group form-group-end"><button class="btn btn-primary" onclick="SettingsPage.resetMyPassword()">重設密碼（寄送 Email）</button></div>';
+    html += '<div class="form-group form-group-end"><button class="btn btn-primary" onclick="SettingsPage.changePwdModal()">修改密碼</button></div>';
     html += '<div class="form-group form-group-end"><button class="btn btn-danger" onclick="SettingsPage.logout()">登出</button></div>';
     html += '</div></div>';
     return html;
@@ -13693,6 +13701,33 @@ var SettingsPage = (function() {
     var res = await Auth.changeMyPassword(oldPwd, newPwd);
     if (res.ok) Toast.success('密碼已更新');
     else Toast.error(res.error);
+  }
+
+  /* v2.4.10 員工自助改密碼（topbar 入口，所有人可用；Modal 版與 WEB 對齊） */
+  function changePwdModal() {
+    var html = '';
+    html += '<p style="margin:0 0 16px;color:var(--text-secondary);font-size:var(--font-size-sm);">驗證原密碼後即可更新；下次登入請使用新密碼。</p>';
+    html += '<div class="form-group"><label>原密碼</label><input type="password" id="cp-old-pwd" class="form-input" autocomplete="current-password"></div>';
+    html += '<div class="form-group"><label>新密碼（至少6位）</label><input type="password" id="cp-new-pwd" class="form-input" autocomplete="new-password"></div>';
+    html += '<div class="form-group"><label>確認新密碼</label><input type="password" id="cp-new-pwd2" class="form-input" autocomplete="new-password"></div>';
+    html += '<div class="form-group form-group-actions"><button class="btn btn-primary" onclick="SettingsPage.changePwdSubmit()">更新密碼</button></div>';
+    Modal.open('修改密碼', html);
+  }
+
+  async function changePwdSubmit() {
+    var oldPwd = document.getElementById('cp-old-pwd').value;
+    var pwd = document.getElementById('cp-new-pwd').value;
+    var pwd2 = document.getElementById('cp-new-pwd2').value;
+    if (!oldPwd) { Toast.error('請輸入原密碼'); return; }
+    if (!pwd || pwd.length < 6) { Toast.error('新密碼至少6位'); return; }
+    if (pwd !== pwd2) { Toast.error('兩次輸入的新密碼不一致'); return; }
+    var res = await Auth.changeMyPassword(oldPwd, pwd);
+    if (res.ok) {
+      Toast.success('密碼已更新，下次登入請使用新密碼');
+      Modal.close();
+    } else {
+      Toast.error(res.error);
+    }
   }
 
   async function addUser() {
@@ -14135,7 +14170,7 @@ var SettingsPage = (function() {
     });
   }
 
-  return { render: render, saveRate: saveRate, updateHall: updateHall, toggleRebate: toggleRebate, toggleCard: toggleCard, updateTicket: updateTicket, logout: logout, resetMyPassword: resetMyPassword, addUser: addUser, updateUserRole: updateUserRole, toggleUserEnabled: toggleUserEnabled, resetUserPassword: resetUserPassword, deleteUserAccount: deleteUserAccount, editUser: editUser, saveUserEdit: saveUserEdit, addEmployee: addEmployee, delEmployee: delEmployee, exportBackup: exportBackup, onImportFile: onImportFile, saveReminder: saveReminder, resolveConflict: resolveConflict, clearConflicts: clearConflicts, restoreItem: restoreItem, dropItem: dropItem };
+  return { render: render, saveRate: saveRate, updateHall: updateHall, toggleRebate: toggleRebate, toggleCard: toggleCard, updateTicket: updateTicket, logout: logout, resetMyPassword: resetMyPassword, changePwdModal: changePwdModal, changePwdSubmit: changePwdSubmit, addUser: addUser, updateUserRole: updateUserRole, toggleUserEnabled: toggleUserEnabled, resetUserPassword: resetUserPassword, deleteUserAccount: deleteUserAccount, editUser: editUser, saveUserEdit: saveUserEdit, addEmployee: addEmployee, delEmployee: delEmployee, exportBackup: exportBackup, onImportFile: onImportFile, saveReminder: saveReminder, resolveConflict: resolveConflict, clearConflicts: clearConflicts, restoreItem: restoreItem, dropItem: dropItem };
 })();
 
 
