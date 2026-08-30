@@ -1,7 +1,7 @@
 {
-  "version": "v2.4.6_1788081440",
-  "buildTime": 1788081440,
+  "version": "v2.4.7_1788083450",
+  "buildTime": 1788083450,
   "date": "2026-08-30",
   "dataRoot": "taiwan_data/pilot",
-  "notes": "美工強化：logo 透明化升級（黑底門檻 mx<60 + 中間段 gamma 1.4，邊緣 halo 0% 完全消除）；WEB 左側導航欄 brand-240.png 同款處理（淺色背景下邊緣完全融入）；兩端 brand-360.png / brand-240.png 同步重新透明化。淺色背景效果極佳（側邊欄）。同 WEB v1.7.7。"
+  "notes": "美工強化 v6（場景適配）：登入 logo（brand-360.png）用 v5 暗部色彩替換成深藍色 #1a1a2e，龍/銅錢暗部像素 RGB 線性插值到背景色 + alpha 漸變，消除「一眼假」感；側邊欄 logo（brand-240.png）保留 v3 純透明化（不色彩替換，保留金屬感）。兩端 PNG 同步重新處理。同 WEB v1.7.8。"
 }
