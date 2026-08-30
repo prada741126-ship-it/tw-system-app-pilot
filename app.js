@@ -1,5 +1,5 @@
-// [BUILD] v2.3.6_1788009600000
-window.TW_BUILD_VERSION = "v2.3.8_1788030000000";
+// [BUILD] v2.3.9_1788067000000
+window.TW_BUILD_VERSION = "v2.3.9_1788067000000";
 
 // [DEV BUILD] 測試環境 — 資料導向 taiwan_data_dev/，不污染正式資料
 window.TW_DEV_MODE = true;
@@ -12685,6 +12685,11 @@ var ShareholderPage = (function() {
 
   // 帳務數據同步後自動刷新
   EventBus.on(EVENTS.MTX_LOADED, function() {
+    if (Router.getCurrent() === 'shareholder') render();
+  });
+
+  // v2.3.9 與 WEB 對齊：團數據同步後自動刷新（封存/建團異動 → 股東分潤即時反映）
+  EventBus.on(EVENTS.TRIPS_LOADED, function() {
     if (Router.getCurrent() === 'shareholder') render();
   });
 
