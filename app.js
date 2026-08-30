@@ -1,5 +1,5 @@
-// [BUILD] v2.4.1_1788070356
-window.TW_BUILD_VERSION = "v2.4.1_1788070356";
+// [BUILD] v2.4.2_1788071150
+window.TW_BUILD_VERSION = "v2.4.2_1788071150";
 
 // [DEV BUILD] 測試環境 — 資料導向 taiwan_data_dev/，不污染正式資料
 window.TW_DEV_MODE = true;
