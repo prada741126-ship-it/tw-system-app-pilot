@@ -1,5 +1,5 @@
 // [BUILD] v2.4.8_1788104698
-window.TW_BUILD_VERSION = "v2.4.8_1788104698";
+window.TW_BUILD_VERSION = "v2.4.9_1788105235";
 
 // [DEV BUILD] 測試環境 — 資料導向 taiwan_data_dev/，不污染正式資料
 window.TW_DEV_MODE = true;
@@ -961,6 +961,15 @@ var Perm = (function() {
       pages: {
         overview: 'read', pending: 'read', member: 'read', room: 'write',
         history: 'read',
+      },
+      special: {},
+    },
+    staff: {
+      label: '員工',
+      pages: {
+        /* v2.4.9 員工角色（9/1 上線）：僅總覽/帳務/會員管理/房務/錢包，且可登錄編輯刪除 */
+        overview: 'read',
+        member: 'write', membersMgmt: 'write', room: 'write', wallet: 'write',
       },
       special: {},
     },
