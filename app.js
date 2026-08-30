@@ -1,5 +1,5 @@
-// [BUILD] v2.4.5_1788078973
-window.TW_BUILD_VERSION = "v2.4.5_1788078973";
+// [BUILD] v2.4.8_1788104698
+window.TW_BUILD_VERSION = "v2.4.8_1788104698";
 
 // [DEV BUILD] 測試環境 — 資料導向 taiwan_data_dev/，不污染正式資料
 window.TW_DEV_MODE = true;
@@ -9083,6 +9083,8 @@ var MemberPage = (function() {
  */
 var WalletPage = (function() {
   var _expanded = {}; // 展開明細的流水 id
+  var _batchMode = false; // v2.4.8 批量刪除模式（與 WEB 兩端對齊）
+  var _batchSel = {};     // 批量勾選：id -> true
 
   var MANUAL_CATEGORIES = [
     { id: 'exchange', label: '換匯' },
@@ -9191,7 +9193,12 @@ var WalletPage = (function() {
     html += '<div><b>流水</b><br>' + entries.length + ' 筆</div>';
     html += '</div>';
 
-    html += '<div class="wallet-toolbar"><button class="btn btn-primary" onclick="WalletPage.showAddManual()">＋ 補登</button> <button class="btn" onclick="WalletPage.showAddPendAdvance()">＋ 墊付</button> <button class="btn" onclick="WalletPage.showAddLoan()">＋ 借支</button> <button class="btn" onclick="WalletPage.showCatalogManage()">品項設定</button></div>';
+    if (_batchMode) {
+      html += '<div class="wallet-toolbar"><button class="btn btn-danger" onclick="WalletPage._doBatchDelete()">刪除所選（' + Object.keys(_batchSel).length + '）</button> <button class="btn" onclick="WalletPage._exitBatch()">取消</button></div>';
+      html += '<div class="batch-hint">批量刪除模式：點選要刪除的補登流水，再按「刪除所選」。自動流水（現金碼/借支/預支等）不可直接刪除。</div>';
+    } else {
+      html += '<div class="wallet-toolbar"><button class="btn btn-primary" onclick="WalletPage.showAddManual()">＋ 補登</button> <button class="btn" onclick="WalletPage.showAddPendAdvance()">＋ 墊付</button> <button class="btn" onclick="WalletPage.showAddLoan()">＋ 借支</button> <button class="btn" onclick="WalletPage.showCatalogManage()">品項設定</button> <button class="btn" onclick="WalletPage._enterBatch()">批量刪除</button></div>';
+    }
     html += _loansPanelHtml(); // v2.2 未回收借支清單（常駐警示）
     html += '<p class="section-desc">只記實際掏出/收回的港幣現鈔；交收回款走結算系統不進錢包。點列可展開明細與編輯／刪除（自動流水不可直接改，請點「前往修改來源」改原單，錢包會自動更新）。借支是純現金借貸，不與帳務回碼／上下分抵銷。</p>';
 
@@ -9203,8 +9210,13 @@ var WalletPage = (function() {
       list.forEach(function(w) {
         var amt = w.amountHKD || 0;
         var isOpen = !!_expanded[w.id];
-        html += '<div class="wallet-item' + (isOpen ? ' open' : '') + '" onclick="WalletPage.toggleDetail(\'' + escJs(w.id) + '\')">';
+        var selectable = _batchMode && w.type === 'manual'; // 僅補登可批量刪（與單筆刪除權限一致）
+        var isSel = !!_batchSel[w.id];
+        html += '<div class="wallet-item' + (isOpen ? ' open' : '') + (selectable ? (isSel ? ' sel' : ' batchable') : '') + '" onclick="WalletPage._itemTap(\'' + escJs(w.id) + '\',' + (selectable ? 'true' : 'false') + ')">';
         html += '<div class="wallet-item-head">';
+        if (selectable) {
+          html += '<span class="wallet-item-cb">' + (isSel ? '✓' : '') + '</span>';
+        }
         html += '<div class="wallet-item-main"><span class="wallet-item-type">' + _typeLabel(w) + '</span>'
           + '<span class="wallet-item-note">' + esc(w.type === 'manual' ? (w.note || _catLabel(w.category)) : (w.note || '')) + '</span></div>';
         html += '<div class="wallet-item-amts"><span class="wallet-item-amt ' + (amt >= 0 ? 'in' : 'out') + '">' + (amt >= 0 ? '+' : '−') + fmtHK(Math.abs(amt)) + '</span>'
@@ -9261,6 +9273,41 @@ var WalletPage = (function() {
   function toggleDetail(id) {
     _expanded[id] = !_expanded[id];
     render();
+  }
+
+  // ===== v2.4.8 批量刪除（與 WEB 兩端對齊） =====
+  function _enterBatch() {
+    _batchMode = true;
+    _batchSel = {};
+    render();
+  }
+  function _exitBatch() {
+    _batchMode = false;
+    _batchSel = {};
+    render();
+  }
+  function _itemTap(id, selectable) {
+    if (selectable) {
+      if (_batchSel[id]) delete _batchSel[id]; else _batchSel[id] = true;
+      render(); // 重繪勾選視覺（_expanded 保留，展開狀態不受影響）
+    } else {
+      toggleDetail(id);
+    }
+  }
+  function _doBatchDelete() {
+    var ids = Object.keys(_batchSel).filter(function(k) { return _batchSel[k]; });
+    if (ids.length === 0) { Toast.warning('請先點選要刪除的補登流水'); return; }
+    Modal.confirm('確定刪除勾選的 ' + ids.length + ' 筆補登流水？', function() {
+      var ok = 0, fail = 0;
+      ids.forEach(function(id) {
+        if (Wallet.removeManual(id)) ok++; else fail++;
+      });
+      _batchMode = false;
+      _batchSel = {};
+      if (fail > 0) Toast.warning('已刪除 ' + ok + ' 筆，' + fail + ' 筆失敗（自動流水不可刪除）');
+      else Toast.success('已刪除 ' + ok + ' 筆補登流水');
+      render();
+    });
   }
 
   // ===== v2.2 港幣借支：登記 / 未回收清單 / 部分回收 =====
@@ -9825,6 +9872,7 @@ var WalletPage = (function() {
 
   return {
     render: render, toggleDetail: toggleDetail,
+    _enterBatch: _enterBatch, _exitBatch: _exitBatch, _itemTap: _itemTap, _doBatchDelete: _doBatchDelete, // v2.4.8
     saveOpen: saveOpen,
     showAddManual: showAddManual, saveManual: saveManual,
     showEditManual: showEditManual, saveEditManual: saveEditManual, delManual: delManual,
