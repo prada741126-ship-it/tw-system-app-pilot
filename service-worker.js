@@ -6,7 +6,7 @@
  *   - 其他 → stale-while-revalidate
  */
 
-var CACHE_VERSION = 'tw-app-v2.4.8';  /// 2026-08-30 v2.4.8 錢包流水批量勾選刪除（批量模式：僅補登可勾選，與單筆刪除權限一致）。同 WEB v1.7.9
+var CACHE_VERSION = 'tw-app-v2.4.9';  /// 2026-08-30 v2.4.9 員工角色（staff）：僅總覽/帳務/會員管理/房務/錢包（可登錄編輯刪除）；APP topbar 新增登出按鈕（員工無法進設定頁）。同 WEB v1.7.10
 var STATIC_CACHE = CACHE_VERSION + '-static';
 var RUNTIME_CACHE = CACHE_VERSION + '-runtime';
 
