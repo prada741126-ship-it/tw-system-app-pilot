@@ -6,7 +6,7 @@
  *   - 其他 → stale-while-revalidate
  */
 
-var CACHE_VERSION = 'tw-app-v2.3.9';  /// 2026-08-30 v2.3.9 三項兩端對齊：①WEB 達標判定統一（calcAgentQuota hasBookings，APP 版已是）②股東分潤頁補 TRIPS_LOADED 監聽（與 WEB 對齊，封存團即時消失）③WEB 移植衝突偵測（mergeArrayWithConflicts + 三方比對基準 + 設定頁同步衝突卡片）
+var CACHE_VERSION = 'tw-app-v2.4.0';  /// 2026-08-30 v2.4.0 P1 共用元件打磨：①元件全狀態對齊 WEB（按鈕按壓/disabled/focus-visible、卡片 border、sticky 表頭）②Toast 加 SVG 圖示+左色條 ③KPI 數字滾動動畫（animateKpis）④配額條三色（達標綠/<50% 藍/≥50% 黃）含 PDF 匯出 ⑤Modal 進場動畫+radius-xl+close hover ⑥登入 focus 金暈 ⑦select 自訂箭頭+disabled ⑧--warning-dark token
 var STATIC_CACHE = CACHE_VERSION + '-static';
 var RUNTIME_CACHE = CACHE_VERSION + '-runtime';
 
