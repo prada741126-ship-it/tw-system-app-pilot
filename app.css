@@ -207,6 +207,8 @@ a { color: var(--accent); text-decoration: none; }
   from { opacity: 0; transform: translateY(6px); }
   to   { opacity: 1; transform: translateY(0); }
 }
+/* P3-3 圖示系統：SVG 共用（stroke 1.8 / 圓角端點 / 1em 隨字級縮放 / currentColor 隨文字色） */
+.ic { vertical-align: -0.15em; flex-shrink: 0; }
 .topbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--spacing-lg); padding-top: env(safe-area-inset-top, 0px); }
 .topbar h2 { font-size: var(--font-size-xl); }
 
