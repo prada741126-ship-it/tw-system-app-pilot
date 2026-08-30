@@ -6,7 +6,7 @@
  *   - 其他 → stale-while-revalidate
  */
 
-var CACHE_VERSION = 'tw-app-v2.4.2';  /// 2026-08-30 v2.4.2 美工 P2-B 六項（與 WEB v1.7.3 同款）：①歷史月份標題 sticky 漸層+折疊箭頭②設定門檻卡卡片化+設定卡摺疊箭頭③待結帳/歷史/設定統一 CSS 箭頭（隱藏舊 ▼ 字元）④手機版表格緊緻化（卡片內橫向捲動/min-width 440/520）⑤待結帳手機按鈕全寬⑥st-threshold-item hover 浮起
+var CACHE_VERSION = 'tw-app-v2.4.3';  /// 2026-08-30 v2.4.3 美工 P3（與 WEB v1.7.4 同款）：①SVG 圖示系統上線：達標/警示/圖表/月曆/檔案/儲存/齒輪/編輯 8 款替換全站 emoji（✅⚠️📊📅📋💾📝⚙），stroke 1.8 圓角端點 1em currentColor ②.ic 共用規則（垂直對齊/不縮放）
 var STATIC_CACHE = CACHE_VERSION + '-static';
 var RUNTIME_CACHE = CACHE_VERSION + '-runtime';
 
