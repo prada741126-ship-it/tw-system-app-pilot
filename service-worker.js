@@ -6,7 +6,7 @@
  *   - 其他 → stale-while-revalidate
  */
 
-var CACHE_VERSION = 'tw-app-v2.4.0';  /// 2026-08-30 v2.4.0 P1 共用元件打磨：①元件全狀態對齊 WEB（按鈕按壓/disabled/focus-visible、卡片 border、sticky 表頭）②Toast 加 SVG 圖示+左色條 ③KPI 數字滾動動畫（animateKpis）④配額條三色（達標綠/<50% 藍/≥50% 黃）含 PDF 匯出 ⑤Modal 進場動畫+radius-xl+close hover ⑥登入 focus 金暈 ⑦select 自訂箭頭+disabled ⑧--warning-dark token
+var CACHE_VERSION = 'tw-app-v2.4.1';  /// 2026-08-30 v2.4.1 美工 P2-A 四頁（與 WEB v1.7.2 同款）：①登入玻璃擬態升級（光暈/模糊24/入場動畫/按鈕漸層陰影）②總覽圖表卡 hover+標題色條+柱狀漸層/快捷卡 icon 反色③帳務卡漸層標頭+區塊色條+子表/代理表斑馬紋④待結帳折疊箭頭+警示左條+漸層 Modal 頭
 var STATIC_CACHE = CACHE_VERSION + '-static';
 var RUNTIME_CACHE = CACHE_VERSION + '-runtime';
 
