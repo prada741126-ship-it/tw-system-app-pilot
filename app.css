@@ -211,6 +211,13 @@ a { color: var(--accent); text-decoration: none; }
 .ic { vertical-align: -0.15em; flex-shrink: 0; }
 .topbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--spacing-lg); padding-top: env(safe-area-inset-top, 0px); }
 .topbar h2 { font-size: var(--font-size-xl); }
+.topbar-right { display: flex; align-items: center; gap: var(--spacing-md); }
+.logout-btn {
+  padding: 6px 14px; border-radius: var(--radius); border: 1px solid var(--border);
+  background: transparent; color: var(--text-secondary); font-size: var(--font-size-sm);
+  cursor: pointer; transition: all var(--transition-fast); -webkit-tap-highlight-color: transparent;
+}
+.logout-btn:active { border-color: var(--danger); color: var(--danger); }
 
 /* components.css — 共用元件（按鈕/卡片/表格/輸入框/狀態標籤/子表格/彈窗/登入/分頁/響應式/列印） */
 
