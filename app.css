@@ -47,11 +47,10 @@
   --badge-danger-bg: #f8d7da;
   --badge-danger-text: #721c24;
 
-  /* === 登入畫面（品牌暖色古銅深色，與博盈圖標呼應）===
-     圖標色系：黑底/古銅龍/金幣/金字 → 背景用暖色深黑漸層，讓玻璃擬態卡浮起、圖標金屬感更突出 */
-  --login-bg-1: #1a0f06;
-  --login-bg-2: #2d1810;
-  --login-bg-3: #3d2415;
+  /* === 登入畫面（品牌深藍漸層 — 原色系）=== */
+  --login-bg-1: #1a1a2e;
+  --login-bg-2: #16213e;
+  --login-bg-3: #0f3460;
   --login-glass: rgba(255,255,255,0.08);
   --login-glass-border: rgba(255,255,255,0.1);
   --login-input-bg: rgba(255,255,255,0.1);
@@ -420,10 +419,10 @@ select.form-input:disabled { background-image: none; }
   background: radial-gradient(circle, rgba(201,168,76,0.16) 0%, rgba(201,168,76,0) 70%);
   top: -120px; left: -100px; pointer-events: none;
 }
-/* 古銅光暈（替代原本的藍光暈，與圖標古銅色完全呼應） */
+/* 藍色光暈（原色系：與品牌深藍背景同色系） */
 #login-overlay::after, #setup-overlay::after {
   content: ""; position: absolute; width: 640px; height: 640px; border-radius: 50%;
-  background: radial-gradient(circle, rgba(193,110,50,0.18) 0%, rgba(193,110,50,0) 70%);
+  background: radial-gradient(circle, rgba(66,153,225,0.14) 0%, rgba(66,153,225,0) 70%);
   bottom: -180px; right: -140px; pointer-events: none;
 }
 .login-box {
