@@ -6,7 +6,7 @@
  *   - 其他 → stale-while-revalidate
  */
 
-var CACHE_VERSION = 'tw-app-v2.4.9';  /// 2026-08-30 v2.4.9 員工角色（staff）：僅總覽/帳務/會員管理/房務/錢包（可登錄編輯刪除）；APP topbar 新增登出按鈕（員工無法進設定頁）。同 WEB v1.7.10
+var CACHE_VERSION = 'tw-app-v2.4.10';  /// 2026-08-31 v2.4.10 員工送待結帳（僅送件，撤回需會計/管理員）+ 兩端 topbar 改密碼 Modal（員工自助）+ 設定頁修改密碼統一 Modal。同 WEB v1.7.11
 var STATIC_CACHE = CACHE_VERSION + '-static';
 var RUNTIME_CACHE = CACHE_VERSION + '-runtime';
 
