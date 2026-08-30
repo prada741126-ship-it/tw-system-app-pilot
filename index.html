@@ -57,7 +57,10 @@
   <div class="main-content">
     <div class="topbar">
       <h2 id="topbar-title">總覽</h2>
-      <div id="sync-status"></div>
+      <div class="topbar-right">
+        <div id="sync-status"></div>
+        <button class="logout-btn" onclick="SettingsPage.logout()">登出</button>
+      </div>
     </div>
     <div id="page-overview" class="page-section active"></div>
     <div id="page-pending" class="page-section"></div>
