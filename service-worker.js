@@ -6,7 +6,7 @@
  *   - 其他 → stale-while-revalidate
  */
 
-var CACHE_VERSION = 'tw-app-v2.4.7';  /// 2026-08-30 v2.4.7 美工強化 v6：登入 logo 暗部色彩替換成深藍色（消除「一眼假」感）+ 側邊欄 logo 保留 v3 純透明化（金屬感）。同 WEB v1.7.8
+var CACHE_VERSION = 'tw-app-v2.4.8';  /// 2026-08-30 v2.4.8 錢包流水批量勾選刪除（批量模式：僅補登可勾選，與單筆刪除權限一致）。同 WEB v1.7.9
 var STATIC_CACHE = CACHE_VERSION + '-static';
 var RUNTIME_CACHE = CACHE_VERSION + '-runtime';
 
