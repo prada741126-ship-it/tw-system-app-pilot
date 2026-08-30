@@ -1,12 +1,12 @@
 {
-  "version": "v2.4.0_1788068318",
-  "buildTime": 1788068318,
+  "version": "v2.4.1_1788070356",
+  "buildTime": 1788070356,
   "date": "2026-08-30",
   "dataRoot": "taiwan_data/pilot",
   "notes": [
-    "P1 共用元件打磨（與 WEB v1.7.1 同款）：按鈕全狀態/卡片 border/sticky 表頭/select 自訂箭頭",
-    "Toast 加 SVG 圖示 + 左色條；KPI 數字滾動動畫（animateKpis）",
-    "配額條三色（達標綠 / 未達標<50% 藍 / 未達標≥50% 黃），含 PDF 匯出",
-    "Modal 進場動畫 + radius-xl + close hover；登入 focus 金暈；--warning-dark token"
+    "P2-A 頁面精修（與 WEB v1.7.2 同款）：登入玻璃擬態升級（背景光暈/blur24/入場動畫/按鈕漸層陰影）",
+    "總覽頁：圖表卡 hover 上浮+標題色條、股東柱狀漸層+伸長動效、快捷卡 icon 反色放大",
+    "帳務頁：卡片漸層標頭+hover 上浮、區塊標題色條、開銷子表與代理表斑馬紋",
+    "待結帳頁：折疊箭頭指示、警示左色條、明細 Modal 漸層頭、KPI 字級層級"
   ]
 }
