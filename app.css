@@ -1489,6 +1489,39 @@ select.form-input:disabled { background-image: none; }
 }
 .sh-exchange-pill input:focus { background: var(--bg-secondary); border-radius: 4px; }
 .sh-exchange-pill .sh-exchange-unit { color: var(--text-muted); }
+/* v2.4.11 快照月份：匯率固定顯示（與 WEB v1.7.12 同款） */
+.sh-exchange-pill .sh-exchange-fixed {
+  font-size: var(--font-size-sm);
+  font-weight: 700;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+
+/* v2.4.11 快照月份：費率藥丸只讀（不可點編輯） */
+.sh-rate-pill.sh-rate-pill-readonly { cursor: default; }
+.sh-rate-pill.sh-rate-pill-readonly:hover { transform: none; box-shadow: none; }
+
+/* v2.4.11 分潤月份切換列 */
+.sh-month-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  flex-wrap: wrap;
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.sh-month-bar .ht-sealed-badge {
+  display: inline-block;
+  padding: 2px 10px;
+  background: var(--success);
+  color: var(--text-inverse);
+  border-radius: var(--radius);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  white-space: nowrap;
+}
 
 .sh-profit-table { width: 100%; border-collapse: collapse; }
 .sh-profit-table th {
@@ -1759,6 +1792,47 @@ select.form-input:disabled { background-image: none; }
   font-size: var(--font-size-sm);
   font-weight: 600;
   white-space: nowrap;
+}
+
+/* ===== v2.4.11 已封存明細查對：預支開銷 / 錢包流水（與 WEB v1.7.12 同款） ===== */
+.ht-detail-block {
+  margin-top: var(--spacing-md);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  padding: var(--spacing-md);
+  background: var(--bg-primary);
+}
+.ht-detail-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 700;
+  font-size: var(--font-size-sm);
+  color: var(--text-primary);
+  margin-bottom: var(--spacing-sm);
+}
+.ht-detail-title .ic { color: var(--accent); }
+.ht-detail-item {
+  margin-bottom: var(--spacing-sm);
+  padding: var(--spacing-sm) var(--spacing-md);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-secondary);
+}
+.ht-detail-item:last-child { margin-bottom: 0; }
+.ht-detail-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+}
+.ht-detail-item .data-table { margin-top: 6px; }
+.ht-detail-note {
+  margin-top: 6px;
+  font-size: var(--font-size-sm);
+  color: var(--text-muted);
 }
 
 /* ===== 響應式 ===== */
