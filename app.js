@@ -1,5 +1,5 @@
 // [BUILD] v2.4.8_1788104698
-window.TW_BUILD_VERSION = "v2.4.10_1788106091";
+window.TW_BUILD_VERSION = "v2.4.11_1788185399";
 
 // [DEV BUILD] 測試環境 — 資料導向 taiwan_data_dev/，不污染正式資料
 window.TW_DEV_MODE = true;
@@ -108,6 +108,7 @@ var STORAGE_KEYS = {
   APP_VERSION:       STORAGE_PREFIX + 'app_version',
   SYNC_OP_LOG:       STORAGE_PREFIX + 'op_log',
   SYNC_QUEUE:        STORAGE_PREFIX + 'sync_queue',
+  PROFIT_SNAPSHOTS:  STORAGE_PREFIX + 'profit_snapshots', // v2.4.11 分潤月報快照（月底固定）
 };
 
 // ============================================================================
@@ -161,6 +162,7 @@ var FB_PATH = {
   // #22 APP 更新檢查：管理端寫入 { latestVersion, apkUrl?, note? }，App 啟動/回前台時比對
   APP_INFO:       FB_DATA_ROOT + '/appInfo',
   CONNECTED:      '.info/connected',
+  PROFIT_SNAPSHOTS: FB_DATA_ROOT + '/profitSnapshots', // v2.4.11 分潤月報快照（月底固定）
 };
 
 // ============================================================================
@@ -1562,12 +1564,177 @@ function calcShareholderTotal(profitData, allShareholders, totalWash, totalProfi
   };
 }
 
+// v2.4.11 分潤月報計算核心（與 WEB v1.7.12 calcShareholderReport 同款）：
+// 分潤頁即時渲染與月報快照共用同一套計算，保證數字一致
+function calcShareholderReport(month, allTxs, shareholders, settings) {
+  var halls = settings.vipHalls || VIP_HALLS;
+  var monthTxs = (allTxs || []).filter(function(t) {
+    return t && !t._deleted && t.date && t.date.substring(0, 7) === month;
+  });
+
+  // 輔助：取得交易廳 ID（交易自身 vipHallId 優先，無指定才回退到團 hallIds）
+  function getHallId(t) {
+    if (t.vipHallId) return t.vipHallId;
+    if (t.tripId && typeof Trips !== 'undefined') {
+      var trip = Trips.getById(t.tripId);
+      if (trip && Array.isArray(trip.hallIds) && trip.hallIds.length > 0) {
+        return trip.hallIds[0];
+      }
+    }
+    return 'unknown';
+  }
+  // 輔助：判斷交易是否屬於 monthlyOnly 代理
+  function isMonthlyOnlyTx(t) {
+    if (!t.agentId || typeof Agents === 'undefined') return false;
+    var agent = Agents.getById(t.agentId);
+    if (!agent) return false;
+    return agent.profitMode === PROFIT_MODE.MONTHLY_ONLY;
+  }
+
+  var totalWash = 0;            // 全量洗碼（含 monthlyOnly，UI 顯示）
+  var totalStandardWash = 0;    // 不含 monthlyOnly（貢獻度分母）
+  var monthlyOnlyWashTotal = 0; // 特殊代理洗碼合計
+  var hallWash = {}, standardHallWash = {}, monthlyOnlyHallWash = {}, moAgentHallWash = {};
+  halls.forEach(function(h) {
+    hallWash[h.id] = 0;
+    standardHallWash[h.id] = 0;
+    monthlyOnlyHallWash[h.id] = 0;
+  });
+  monthTxs.forEach(function(tx) {
+    var hallId = getHallId(tx);
+    var wash = tx.washCode || 0;
+    totalWash += wash;
+    if (!isMonthlyOnlyTx(tx)) totalStandardWash += wash;
+    if (hallWash[hallId] !== undefined) hallWash[hallId] += wash;
+    if (isMonthlyOnlyTx(tx)) {
+      monthlyOnlyWashTotal += wash;
+      if (monthlyOnlyHallWash[hallId] !== undefined) monthlyOnlyHallWash[hallId] += wash;
+      if (!moAgentHallWash[tx.agentId]) moAgentHallWash[tx.agentId] = {};
+      moAgentHallWash[tx.agentId][hallId] = (moAgentHallWash[tx.agentId][hallId] || 0) + wash;
+    } else {
+      if (standardHallWash[hallId] !== undefined) standardHallWash[hallId] += wash;
+    }
+  });
+
+  // 各廳盈利(現結)/月退費
+  var hallData = {};
+  var totalProfit = 0, totalRebate = 0, totalMonthlyOnlyRebate = 0;
+  halls.forEach(function(hall) {
+    var stdWash = standardHallWash[hall.id] || 0;
+    var moWash = monthlyOnlyHallWash[hall.id] || 0;
+    var allWash = stdWash + moWash;
+    var stdWashRaw = stdWash * 10000;
+    var cashRate = hall.cashRate || hall.rate;
+    var profit = stdWashRaw * cashRate;
+    var stdRebate = hall.hasMonthlyRebate ? stdWashRaw * hall.rebateRate : 0;
+    var moRebate = 0;
+    if (hall.hasMonthlyRebate && moWash > 0) {
+      Object.keys(moAgentHallWash).forEach(function(agentId) {
+        var agent = (typeof Agents !== 'undefined') ? Agents.getById(agentId) : null;
+        if (!agent) return;
+        var agentHallWash = moAgentHallWash[agentId][hall.id] || 0;
+        if (agentHallWash === 0) return;
+        var rate = (agent.customRebateRates && typeof agent.customRebateRates[hall.id] === 'number')
+          ? agent.customRebateRates[hall.id]
+          : hall.rebateRate;
+        moRebate += agentHallWash * 10000 * rate;
+      });
+    }
+    var rebate = stdRebate + moRebate;
+    hallData[hall.id] = {
+      wash: allWash, standardWash: stdWash, monthlyOnlyWash: moWash,
+      profit: profit, rebate: rebate, standardRebate: stdRebate, monthlyOnlyRebate: moRebate,
+      total: profit + rebate,
+    };
+    totalProfit += profit;
+    totalRebate += rebate;
+    totalMonthlyOnlyRebate += moRebate;
+  });
+  var grandTotal = totalProfit + totalRebate;
+
+  // 額外收入
+  var extraIncomes = (typeof ExtraIncome !== 'undefined' && ExtraIncome.getByMonth) ? ExtraIncome.getByMonth(month) : [];
+  var extraProfit = extraIncomes.reduce(function(s, e) { return s + (e.amountHK || 0); }, 0);
+
+  // 門票利潤（水舞間/水上樂園）
+  var tp = settings.ticketPrices || {};
+  var ticketProfits = [];
+  var totalTicketProfit = 0;
+  monthTxs.forEach(function(tx) {
+    (tx.expenses || []).forEach(function(e) {
+      if (!e.ticketType || e.ticketType === 'other') return;
+      var ourPrice = 0;
+      if (e.ticketType === 'wp') {
+        ourPrice = (tp.waterPark || { ourPrice: 406 }).ourPrice || 0;
+      } else if (e.ticketType.indexOf('wd-') === 0) {
+        var wdIdx = parseInt(e.ticketType.substring(3));
+        var wdTicket = (tp.waterDance || [])[wdIdx];
+        if (wdTicket) ourPrice = wdTicket.ourPrice || 0;
+      }
+      var qty = e.quantity || 1;
+      var profit = (e.amountHK || 0) - (ourPrice * qty);
+      var agent = (typeof Agents !== 'undefined') ? Agents.getById(tx.agentId) : null;
+      ticketProfits.push({
+        date: tx.date || '',
+        agentName: agent ? agent.name : (tx.agentId || ''),
+        itemName: e.name || '',
+        profitHK: profit,
+      });
+      totalTicketProfit += profit;
+    });
+  });
+  var totalExtra = extraProfit + totalTicketProfit;
+
+  // 匯率
+  var monthlyRate = (settings.monthlyRates || {})[month] || {};
+  var exchangeRate = monthlyRate.shareholderRate || 4.1;
+  var totalShares = shareholders.reduce(function(s, sh) { return s + (sh.shares || 0); }, 0);
+
+  // 每股東分潤
+  var shRows = [];
+  shareholders.forEach(function(sh) {
+    var profitData = calcShareholderProfit(sh, monthTxs, settings, month);
+    var totalData = calcShareholderTotal(profitData, shareholders, totalStandardWash, grandTotal, totalExtra, totalMonthlyOnlyRebate);
+    var extraShare = totalShares > 0 ? totalExtra * (sh.shares / totalShares) : 0;
+    shRows.push({
+      sh: sh, profitData: profitData, totalData: totalData, extraShare: extraShare,
+      personalWash: profitData.personalWash, monthlyOnlyWash: profitData.monthlyOnlyWash || 0,
+      capital50: totalData.capital50, contribution: totalData.contribution, contribution50: totalData.contribution50,
+      moRebateShare: totalData.moRebateShare, totalPayableHK: totalData.totalPayableHK, totalPayableTW: totalData.totalPayableTW,
+    });
+  });
+
+  return {
+    month: month,
+    exchangeRate: exchangeRate,
+    totalShares: totalShares,
+    totals: {
+      wash: totalWash, standardWash: totalStandardWash, monthlyOnlyWash: monthlyOnlyWashTotal,
+      profit: totalProfit, rebate: totalRebate, monthlyOnlyRebate: totalMonthlyOnlyRebate,
+      extra: totalExtra, ticketProfit: totalTicketProfit, grandTotal: grandTotal,
+    },
+    halls: halls.map(function(h) {
+      var d = hallData[h.id] || { wash: 0, standardWash: 0, monthlyOnlyWash: 0, profit: 0, rebate: 0, monthlyOnlyRebate: 0, total: 0 };
+      return {
+        id: h.id, name: h.name,
+        cashRate: h.cashRate || h.rate, rebateRate: h.rebateRate || 0, rate: h.rate,
+        wash: d.wash, standardWash: d.standardWash, monthlyOnlyWash: d.monthlyOnlyWash,
+        profit: d.profit, rebate: d.rebate, monthlyOnlyRebate: d.monthlyOnlyRebate, total: d.total,
+      };
+    }),
+    shareholders: shRows,
+    extraIncomes: extraIncomes,
+    ticketProfits: ticketProfits,
+  };
+}
+
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     calcAgentQuota: calcAgentQuota,
     calcTripStats: calcTripStats,
     calcShareholderProfit: calcShareholderProfit,
     calcShareholderTotal: calcShareholderTotal,
+    calcShareholderReport: calcShareholderReport,
   };
 }
 
@@ -2086,6 +2253,7 @@ var _UPLOAD_META = {
   HOTEL_CONFIG:  { stateKey: 'hotelConfig',  event: 'HOTEL_CONFIG_LOADED' },
   USERS:         { stateKey: 'users',        event: 'USERS_LOADED' },
   AUDIT_LOG:     { stateKey: 'auditLog',     event: 'AUDIT_LOADED' },
+  PROFIT_SNAPSHOTS: { stateKey: 'profitSnapshots', event: 'SYNC_COMPLETE' }, // v2.4.11 分潤月報快照
 };
 
 // 全量同步上傳 —— 修正「盲寫全量覆蓋雲端」的根本缺陷：
@@ -2789,6 +2957,7 @@ var Backup = (function() {
     { name: 'hotelConfig',  storeKey: STORAGE_KEYS.HOTEL_CONFIG, stateKey: 'hotelConfig',  event: EVENTS.HOTEL_CONFIG_LOADED, fbKey: 'HOTEL_CONFIG' },
     { name: 'users',        storeKey: STORAGE_KEYS.USERS,       stateKey: 'users',        event: EVENTS.USERS_LOADED,        fbKey: 'USERS' },
     { name: 'auditLog',      storeKey: STORAGE_KEYS.AUDIT_LOG,    stateKey: 'auditLog',     event: EVENTS.AUDIT_LOADED,        fbKey: 'AUDIT_LOG' },
+    { name: 'profitSnapshots', storeKey: STORAGE_KEYS.PROFIT_SNAPSHOTS, stateKey: 'profitSnapshots', event: EVENTS.SYNC_COMPLETE, fbKey: 'PROFIT_SNAPSHOTS' }, // v2.4.11 分潤月報快照
   ];
 
   // 物件型集合（鍵值合併，addedAt 新者勝 — 與 watchers.js EMPLOYEE_LIST 同規則）
@@ -3138,6 +3307,7 @@ function _setupWatchers() {
     { key: 'HOTEL_CONFIG',  storeKey: STORAGE_KEYS.HOTEL_CONFIG,  event: EVENTS.HOTEL_CONFIG_LOADED,  stateKey: 'hotelConfig' },
     { key: 'USERS',         storeKey: STORAGE_KEYS.USERS,         event: EVENTS.USERS_LOADED,         stateKey: 'users' },
     { key: 'AUDIT_LOG',      storeKey: STORAGE_KEYS.AUDIT_LOG,      event: EVENTS.AUDIT_LOADED,         stateKey: 'auditLog' },
+    { key: 'PROFIT_SNAPSHOTS', storeKey: STORAGE_KEYS.PROFIT_SNAPSHOTS, event: EVENTS.SYNC_COMPLETE,  stateKey: 'profitSnapshots' }, // v2.4.11 分潤月報快照
   ];
 
   watchList.forEach(function(w) {
@@ -3271,6 +3441,7 @@ function _resyncAll() {
     FB_PATH.SUPPLEMENTS, FB_PATH.SETTINGS, FB_PATH.EXTRA_INCOME,
     FB_PATH.HOTEL_CONFIG, FB_PATH.USERS,
     FB_PATH.AUDIT_LOG,
+    FB_PATH.PROFIT_SNAPSHOTS, // v2.4.11 分潤月報快照
   ];
   var storeMap = {};
   storeMap[FB_PATH.MEMBERS]       = { storeKey: STORAGE_KEYS.MEMBERS,       event: EVENTS.MEMBERS_LOADED,       stateKey: 'members' };
@@ -3289,6 +3460,7 @@ function _resyncAll() {
   storeMap[FB_PATH.HOTEL_CONFIG]  = { storeKey: STORAGE_KEYS.HOTEL_CONFIG,  event: EVENTS.HOTEL_CONFIG_LOADED,  stateKey: 'hotelConfig' };
   storeMap[FB_PATH.USERS]         = { storeKey: STORAGE_KEYS.USERS,         event: EVENTS.USERS_LOADED,         stateKey: 'users' };
   storeMap[FB_PATH.AUDIT_LOG]      = { storeKey: STORAGE_KEYS.AUDIT_LOG,      event: EVENTS.AUDIT_LOADED,         stateKey: 'auditLog' };
+  storeMap[FB_PATH.PROFIT_SNAPSHOTS] = { storeKey: STORAGE_KEYS.PROFIT_SNAPSHOTS, event: EVENTS.SYNC_COMPLETE,     stateKey: 'profitSnapshots' }; // v2.4.11 分潤月報快照
 
   syncPaths.forEach(function(path) {
     var cfg = storeMap[path];
@@ -3648,6 +3820,8 @@ var Trips = (function() {
     });
     /* v2.3.4 級聯封存：該團關聯訂房一併綁定團並標記 sealedAt，讓房務明細跟著團封存 */
     _cascadeSealBookingsForTrip(id);
+    /* v2.4.11 級聯封存：該團帳務/預支/錢包流水一併標記 sealedAt（隱藏到歷史查詢、不可再編刪） */
+    _cascadeSealTripData(id);
     // Phase 1D / 1.16：封存事件獨立廣播（供審計 autoLog 記錄 seal 動作 + 回收站追蹤可還原）
     if (updated) EventBus.emit(EVENTS.TRIP_SEALED, updated);
     return updated;
@@ -3720,6 +3894,62 @@ var Trips = (function() {
       if (typeof Bookings.save === 'function') Bookings.save(fullArr);
       if (typeof enqueue === 'function') enqueue(FB_PATH.BOOKINGS, payloads);
     }
+  }
+  /* v2.4.11 級聯封存該團「非訂房」明細（與 WEB v1.7.12 對齊）：
+     - memberTxs（帳務）：tripId 相符 → sealedAt
+     - pendingExps（預支開銷）：tripId 相符 → sealedAt
+     - walletTxs（錢包流水）：tripId 相符 → sealedAt
+     封存後錢包頁只顯示未封存、編輯/刪除守門一律擋下；歷史查詢可查對。
+     借支（loans）為獨立現金借貸，不綁團封存（可跨月未還）。 */
+  function _cascadeSealTripData(tripId) {
+    var now = Date.now();
+    var payloads = {};
+
+    // memberTxs（帳務）
+    var mtxArr = State.get('memberTxs') || [];
+    var mtxPayload = {};
+    mtxArr.forEach(function(t) {
+      if (!t || t._deleted || t.sealedAt || t.tripId !== tripId) return;
+      t.sealedAt = now;
+      t._updatedAt = now;
+      if (t._fbKey) mtxPayload[t._fbKey] = t;
+    });
+    if (Object.keys(mtxPayload).length > 0) {
+      if (typeof MemberTxs.save === 'function') MemberTxs.save(mtxArr);
+      payloads[FB_PATH.MEMBER_TXS] = mtxPayload;
+    }
+
+    // pendingExps（預支開銷）
+    var pexpArr = State.get('pendingExps') || [];
+    var pexpPayload = {};
+    pexpArr.forEach(function(p) {
+      if (!p || p._deleted || p.sealedAt || p.tripId !== tripId) return;
+      p.sealedAt = now;
+      p._updatedAt = now;
+      if (p._fbKey) pexpPayload[p._fbKey] = p;
+    });
+    if (Object.keys(pexpPayload).length > 0) {
+      if (typeof PendExps.save === 'function') PendExps.save(pexpArr);
+      payloads[FB_PATH.PENDING_EXPS] = pexpPayload;
+    }
+
+    // walletTxs（錢包流水）
+    var wtxArr = State.get('walletTxs') || [];
+    var wtxPayload = {};
+    wtxArr.forEach(function(w) {
+      if (!w || w._deleted || w.sealedAt || w.tripId !== tripId) return;
+      w.sealedAt = now;
+      w._updatedAt = now;
+      if (w._fbKey) wtxPayload[w._fbKey] = w;
+    });
+    if (Object.keys(wtxPayload).length > 0) {
+      if (typeof Wallet.save === 'function') Wallet.save(wtxArr);
+      payloads[FB_PATH.WALLET_TXS] = wtxPayload;
+    }
+
+    Object.keys(payloads).forEach(function(path) {
+      if (typeof enqueue === 'function') enqueue(path, payloads[path]);
+    });
   }
   /* v2.3.4 級聯刪除指定團的所有預支單（PendExps.remove 發 PEXP_DELETED → Wallet.removeForPend 連動刪流水） */
   function _cascadeDeletePendExpsForTrip(tripId) {
@@ -4373,6 +4603,79 @@ var PendExps = (function() {
       });
     },
     create: create, update: update, remove: remove,
+  };
+})();
+
+
+// === src/data/profitSnapshots.js ===
+/**
+ * data/profitSnapshots.js — 分潤月報快照（v2.4.11，與 WEB v1.7.12 對齊）
+ * 每月結算（批量封存月份）時把當月分潤結果固定存檔 → 之後改費率/股東/額外收入
+ * 不影響已封存月份的分潤數字（像簽名的結算單）。
+ * 依賴: calc/stats.js (calcShareholderReport), data/shareholders.js, data/settings.js, data/extraIncome.js
+ */
+var ProfitSnapshots = (function() {
+  function load() {
+    var arr = Store.readArray(STORAGE_KEYS.PROFIT_SNAPSHOTS);
+    State.set('profitSnapshots', arr);
+    return arr;
+  }
+  function save(arr) {
+    Store.writeArray(STORAGE_KEYS.PROFIT_SNAPSHOTS, arr);
+    State.set('profitSnapshots', arr);
+  }
+  function getAll() {
+    return (State.get('profitSnapshots') || []).filter(function(s) { return !s._deleted; });
+  }
+  function getByMonth(month) {
+    return getAll().find(function(s) { return s.month === month; }) || null;
+  }
+  function has(month) {
+    return !!getByMonth(month);
+  }
+  function create(month, report) {
+    var now = Date.now();
+    var item = {
+      id: 'ps_' + month,
+      month: month,
+      createdAt: now,
+      sealedAt: now,
+      report: report, // calcShareholderReport 結果（固定不變）
+      _fbKey: 'ps_' + month,
+      _updatedAt: now,
+    };
+    var arr = State.get('profitSnapshots') || [];
+    arr.push(item);
+    save(arr);
+    var obj = {}; obj[item._fbKey] = item;
+    if (typeof enqueue === 'function') enqueue(FB_PATH.PROFIT_SNAPSHOTS, obj);
+    return item;
+  }
+  /* 依當下資料即時計算並固定該月分潤（與分潤頁同口徑） */
+  function createForMonth(month) {
+    if (!month) return null;
+    var existing = getByMonth(month);
+    if (existing) return existing; // 已固定，不重算（快照=不可變）
+    if (typeof calcShareholderReport !== 'function') return null;
+    var shareholders = (typeof Shareholders !== 'undefined') ? Shareholders.getAll() : [];
+    var settings = (typeof Settings !== 'undefined') ? Settings.get() : {};
+    var allTxs = (typeof MemberTxs !== 'undefined') ? MemberTxs.getAll() : [];
+    var report = calcShareholderReport(month, allTxs, shareholders, settings);
+    return create(month, report);
+  }
+  function remove(month) {
+    var arr = State.get('profitSnapshots') || [];
+    var idx = arr.findIndex(function(s) { return s.month === month; });
+    if (idx < 0) return;
+    arr[idx]._deleted = true;
+    arr[idx]._updatedAt = Date.now();
+    save(arr);
+    var obj = {}; obj[arr[idx]._fbKey] = arr[idx];
+    if (typeof enqueue === 'function') enqueue(FB_PATH.PROFIT_SNAPSHOTS, obj);
+  }
+  return {
+    load: load, save: save, getAll: getAll, getByMonth: getByMonth, has: has,
+    create: create, createForMonth: createForMonth, remove: remove,
   };
 })();
 
@@ -6630,9 +6933,112 @@ var PdfExport = (function() {
       '匯出股東全覽 PDF' + (tripId ? '（團 ' + tripId + '）' : '（全部團）'));
   }
 
+  /* v2.4.11 分潤月報 PDF（與 WEB v1.7.12 對齊）：快照月份用快照固定數據，非快照月份即時計算 */
+  function exportShareholderReport(month) {
+    if (!month) { Toast.error('請先選擇分潤月份'); return; }
+    var snap = (typeof ProfitSnapshots !== 'undefined') ? ProfitSnapshots.getByMonth(month) : null;
+    var report = snap
+      ? snap.report
+      : calcShareholderReport(month, MemberTxs.getAll(), Shareholders.getAll(), Settings.get());
+
+    var r = report.totals;
+    var shRows = report.shareholders || [];
+    var hallRows = report.halls || [];
+    var extraIncomes = report.extraIncomes || [];
+    var ticketProfits = report.ticketProfits || [];
+
+    var s = '';
+    s += '<div class="summary-bar">';
+    s += '總洗碼 ' + fmtCardNum(r.wash) + ' 萬 ｜ 總盈利(現結) HK$ ' + fmtNum(r.profit)
+      + ' ｜ 總月退費 HK$ ' + fmtNum(r.rebate) + ' ｜ 額外收入 HK$ ' + fmtNum(r.extra)
+      + ' ｜ 合計(錢池) HK$ ' + fmtNum(r.grandTotal);
+    s += '</div>';
+
+    // 股東分潤明細
+    s += '<div class="section"><div class="section-title">股東分潤明細（匯率 1 HKD = ' + report.exchangeRate + ' TWD）</div>';
+    s += '<table><thead><tr>';
+    s += '<th>股東</th><th>持股</th><th class="num">洗碼(萬)</th><th class="num">資金股50%(HK)</th><th class="num">貢獻度</th><th class="num">貢獻可得(HK)</th><th class="num">特殊月退(HK)</th><th class="num">額外收入(HK)</th><th class="num">合計應付(HK)</th><th class="num">合計應付(TW)</th>';
+    s += '</tr></thead><tbody>';
+    var sumHK = 0, sumTW = 0, sumPersonal = 0, sumMo = 0;
+    shRows.forEach(function(row) {
+      var sh = row.sh;
+      sumHK += row.totalPayableHK;
+      sumTW += row.totalPayableTW;
+      sumPersonal += row.profitData.personalWash;
+      sumMo += (row.profitData.monthlyOnlyWash || 0);
+      s += '<tr>';
+      s += '<td>' + _escapeHtml(sh.name) + '</td>';
+      var sv = sh.shares || 0;
+      s += '<td>' + (sv % 1 === 0 ? sv : sv.toFixed(1)) + '</td>';
+      s += '<td class="num">' + fmtCardNum(row.profitData.personalWash) + '</td>';
+      s += '<td class="num">' + fmtNum(row.capital50) + '</td>';
+      s += '<td class="num">' + (row.contribution * 100).toFixed(1) + '%</td>';
+      s += '<td class="num">' + fmtNum(row.contribution50) + '</td>';
+      s += '<td class="num">' + fmtNum(row.moRebateShare) + '</td>';
+      s += '<td class="num">' + fmtNum(row.extraShare) + '</td>';
+      s += '<td class="num">' + fmtNum(row.totalPayableHK) + '</td>';
+      s += '<td class="num positive">' + fmtNum(row.totalPayableTW) + '</td>';
+      s += '</tr>';
+    });
+    s += '<tr class="total-row">';
+    s += '<td>合計</td><td>' + report.totalShares + '</td>';
+    s += '<td class="num">' + fmtCardNum(sumPersonal) + (sumMo > 0 ? ' (+特殊' + fmtCardNum(sumMo) + ')' : '') + '</td>';
+    s += '<td class="num">—</td><td class="num">—</td><td class="num">—</td>';
+    s += '<td class="num">' + fmtNum(r.monthlyOnlyRebate) + '</td><td class="num">' + fmtNum(r.extra) + '</td>';
+    s += '<td class="num">' + fmtNum(sumHK) + '</td><td class="num positive">' + fmtNum(sumTW) + '</td>';
+    s += '</tr>';
+    s += '</tbody></table>';
+    if (r.monthlyOnlyWash > 0) {
+      s += '<div style="font-size:11px;color:#666;margin-top:4px;">※ 特殊代理洗碼 ' + fmtCardNum(r.monthlyOnlyWash) + ' 萬計入總洗碼顯示，但不計入個人貢獻度；特殊月退 100% 按持股均分。</div>';
+    }
+    s += '</div>';
+
+    // 貴賓廳明細
+    s += '<div class="section"><div class="section-title">貴賓廳明細</div>';
+    s += '<table><thead><tr>';
+    s += '<th>貴賓廳</th><th class="num">洗碼(萬)</th><th class="num">盈利(HK)</th><th class="num">月退費(HK)</th><th class="num">合計(HK)</th><th class="num">佔比</th>';
+    s += '</tr></thead><tbody>';
+    hallRows.forEach(function(h) {
+      var pct = r.wash > 0 ? (h.wash / r.wash * 100).toFixed(1) : '0.0';
+      s += '<tr>';
+      s += '<td>' + _escapeHtml(h.name) + '</td>';
+      s += '<td class="num">' + fmtCardNum(h.wash) + (h.monthlyOnlyWash > 0 ? ' (標準' + fmtCardNum(h.standardWash) + '+特殊' + fmtCardNum(h.monthlyOnlyWash) + ')' : '') + '</td>';
+      s += '<td class="num">' + fmtNum(h.profit) + '</td>';
+      s += '<td class="num">' + fmtNum(h.rebate) + (h.monthlyOnlyRebate > 0 ? ' (含特殊' + fmtNum(h.monthlyOnlyRebate) + ')' : '') + '</td>';
+      s += '<td class="num">' + fmtNum(h.total) + '</td>';
+      s += '<td class="num">' + pct + '%</td>';
+      s += '</tr>';
+    });
+    s += '<tr class="total-row"><td>總計</td><td class="num">' + fmtCardNum(r.wash) + '</td><td class="num">' + fmtNum(r.profit) + '</td><td class="num">' + fmtNum(r.rebate) + '</td><td class="num">' + fmtNum(r.grandTotal) + '</td><td class="num">100%</td></tr>';
+    s += '</tbody></table>';
+    s += '</div>';
+
+    // 額外收入明細
+    if (extraIncomes.length > 0 || ticketProfits.length > 0) {
+      s += '<div class="section"><div class="section-title">額外收入明細</div>';
+      s += '<table><thead><tr><th>描述</th><th class="num">金額(HK)</th></tr></thead><tbody>';
+      extraIncomes.forEach(function(e) {
+        s += '<tr><td>' + _escapeHtml(e.description || '') + '</td><td class="num">' + fmtNum(e.amountHK || 0) + '</td></tr>';
+      });
+      ticketProfits.forEach(function(tp) {
+        s += '<tr><td>' + _escapeHtml((tp.date || '') + ' ' + tp.agentName + ' ' + tp.itemName) + '</td><td class="num">' + fmtNum(tp.profitHK) + '</td></tr>';
+      });
+      s += '<tr class="total-row"><td>合計</td><td class="num">' + fmtNum(r.extra) + '</td></tr>';
+      s += '</tbody></table>';
+      s += '</div>';
+    }
+
+    var subtitle = month + ' 分潤月報' + (snap ? '（已固定快照）' : '（當下計算）') + ' ｜ 股東 ' + shRows.length + ' 位 ｜ 匯率 ' + report.exchangeRate;
+    var html = buildPage('股東分潤月報', subtitle, '', s);
+    var ok = generatePDF(html, '股東分潤月報_' + month);
+    if (ok) AuditLog.log('pdfExport', 'export', month,
+      '匯出分潤月報 PDF：' + month + (snap ? '（已固定快照）' : '（當下計算）'));
+  }
+
   return {
     exportAgent: exportAgent,
     exportShareholder: exportShareholder,
+    exportShareholderReport: exportShareholderReport,
   };
 })();
 
@@ -7226,7 +7632,12 @@ var PendingPage = (function() {
   function render() {
     var trips = Trips.getAll().filter(function(t) { return t.status === TRIP_STATUS.PENDING_SETTLEMENT; });
     var html = '<div class="card">';
-    html += '<div class="card-header"><h3>待結帳團列表</h3></div>';
+    html += '<div class="card-header"><h3>待結帳團列表</h3>';
+    /* v2.4.11 按月批量封存：整月待結帳團一次封存 + 自動固定該月分潤月報快照（僅可寫 pending 的角色） */
+    if (trips.length > 0 && (typeof Perm === 'undefined' || Perm.canWrite('pending'))) {
+      html += '<button class="btn btn-secondary" style="margin-left:auto;" onclick="PendingPage.openMonthSeal()">按月封存</button>';
+    }
+    html += '</div>';
     html += '<p class="section-desc">會計在帳務頁「傳帳給上級」後，團會出現在這裡。帳務有誤可「撤回」退回帳務頁重新編輯；與上級確認交收完成後，即可封存歸檔（封存＝雙方確認，不可再改）。</p>';
 
     if (trips.length === 0) {
@@ -7240,6 +7651,109 @@ var PendingPage = (function() {
 
     var container = document.getElementById('page-pending');
     if (container) container.innerHTML = html;
+  }
+
+  /* v2.4.11 ===== 按月批量封存（與 WEB v1.7.12 對齊） ===== */
+  /* 團歸屬月份（與 sealTrip 同口徑：lastSettlementDate 優先，其次 startDate） */
+  function monthOfTrip(trip) {
+    var d = trip.lastSettlementDate || trip.startDate || '';
+    return d ? d.substring(0, 7) : '';
+  }
+  /* 有待結帳團的月份清單（倒序：最新在前）+ 各月團數 */
+  function pendingMonths() {
+    var m = {};
+    Trips.getAll().forEach(function(t) {
+      if (t.status !== TRIP_STATUS.PENDING_SETTLEMENT) return;
+      var k = monthOfTrip(t);
+      if (k) m[k] = (m[k] || 0) + 1;
+    });
+    return Object.keys(m).sort().reverse().map(function(k) { return { month: k, count: m[k] }; });
+  }
+  function openMonthSeal() {
+    var months = pendingMonths();
+    if (months.length === 0) {
+      Toast.info('目前沒有待結帳的團');
+      return;
+    }
+    var html = '';
+    html += '<p style="margin:0 0 12px;font-size:14px;color:var(--text-secondary);">選擇要整月封存的月份，確認後一次封存該月所有待結帳團。</p>';
+    html += '<select id="seal-month-select" class="form-input" style="width:100%;" onchange="PendingPage.onSealMonthChange(this.value)">';
+    months.forEach(function(mo) {
+      html += '<option value="' + mo.month + '">' + mo.month + '（' + mo.count + ' 團待結帳）</option>';
+    });
+    html += '</select>';
+    html += '<div id="seal-month-list" style="margin-top:14px;"></div>';
+    html += '<div style="text-align:right;margin-top:16px;">';
+    html += '<button class="btn btn-secondary" onclick="Modal.close()">取消</button> ';
+    html += '<button class="btn btn-danger" onclick="PendingPage.confirmMonthSeal()">確認整月封存</button>';
+    html += '</div>';
+    Modal.open('按月批量封存', html);
+    setTimeout(function() {
+      var sel = document.getElementById('seal-month-select');
+      if (sel) PendingPage.onSealMonthChange(sel.value);
+    }, 60);
+  }
+  function onSealMonthChange(month) {
+    var container = document.getElementById('seal-month-list');
+    if (!container) return;
+    var trips = Trips.getAll().filter(function(t) {
+      return t.status === TRIP_STATUS.PENDING_SETTLEMENT && monthOfTrip(t) === month;
+    });
+    if (trips.length === 0) {
+      container.innerHTML = '<div class="empty-state">此月份無待結帳團</div>';
+      return;
+    }
+    var html = '<div style="max-height:280px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;">';
+    html += '<table class="mb-ap-table" style="margin:0;"><thead><tr>';
+    html += '<th>團號</th><th>股東</th><th class="num">洗碼(萬)</th><th class="num">交收NT</th>';
+    html += '</tr></thead><tbody>';
+    trips.forEach(function(trip) {
+      var sh = Shareholders.getById(trip.shareholderId);
+      var mtxs = MemberTxs.getByTrip(trip.id);
+      var totalWash = mtxs.reduce(function(s, x) { return s + (x.washCode || 0); }, 0);
+      var totalSettle = mtxs.reduce(function(s, x) { return s + calcTotalNT(x); }, 0);
+      var supPending = Supplements.getByTrip(trip.id)
+        .filter(function(s) { return s.status === 'pending'; })
+        .reduce(function(s, sup) { return s + (sup.settlementAmount || 0); }, 0);
+      html += '<tr>';
+      html += '<td>' + trip.id + '</td>';
+      html += '<td>' + (sh ? sh.name : '') + '</td>';
+      html += '<td class="num">' + fmtCardNum(totalWash) + '</td>';
+      html += '<td class="num ' + (totalSettle < 0 ? 'num-negative' : 'num-positive') + '">' + fmtCardNum(Math.round(totalSettle)) + '</td>';
+      html += '</tr>';
+    });
+    html += '</tbody></table>';
+    html += '</div>';
+    html += '<p style="margin:10px 0 0;font-size:13px;color:var(--warning);">'
+      + '\u26a0 封存不可逆。確認後將：全部封存該月團（帳務/預支/錢包流水一併級聯封存，隱藏到歷史查詢），'
+      + '並自動固定該月股東分潤月報快照（之後改費率不影響）。</p>';
+    container.innerHTML = html;
+  }
+  function confirmMonthSeal() {
+    var sel = document.getElementById('seal-month-select');
+    var month = sel ? sel.value : '';
+    if (!month) return;
+    var trips = Trips.getAll().filter(function(t) {
+      return t.status === TRIP_STATUS.PENDING_SETTLEMENT && monthOfTrip(t) === month;
+    });
+    if (trips.length === 0) {
+      Toast.warning('此月份已無待結帳團');
+      Modal.close();
+      return;
+    }
+    Modal.confirm('將封存 ' + month + ' 共 ' + trips.length + ' 團（不可逆），並自動固定該月分潤月報快照。確定要整月封存？', function() {
+      var count = 0;
+      trips.forEach(function(t) {
+        if (Trips.sealTrip(t.id)) count++;
+      });
+      /* 自動固定該月分潤月報快照（已存在則不重算，快照=不可變） */
+      var snap = null;
+      if (typeof ProfitSnapshots !== 'undefined' && ProfitSnapshots.createForMonth) {
+        snap = ProfitSnapshots.createForMonth(month);
+      }
+      Toast.success('已封存 ' + count + ' 團' + (snap ? '，並固定 ' + month + ' 分潤月報' : ''));
+      render();
+    });
   }
 
   function buildTripCard(trip) {
@@ -7647,7 +8161,7 @@ var PendingPage = (function() {
   // v2.3.8 團數據同步後自動刷新（WEB/APP 任一端封存 → 待結帳列表即時移除該團）
   EventBus.on(EVENTS.TRIPS_LOADED, function() { render(); });
 
-  return { render: render, sealTrip: sealTrip, revertTrip: revertTrip, toggleCard: toggleCard, showMemberDetail: showMemberDetail, shareTrip: shareTrip, buildShareText: buildShareText, shareText: _shareText };
+  return { render: render, sealTrip: sealTrip, revertTrip: revertTrip, toggleCard: toggleCard, showMemberDetail: showMemberDetail, shareTrip: shareTrip, buildShareText: buildShareText, shareText: _shareText, openMonthSeal: openMonthSeal, onSealMonthChange: onSealMonthChange, confirmMonthSeal: confirmMonthSeal }; // v2.4.11 按月批量封存
 })();
 
 
@@ -9182,11 +9696,14 @@ var WalletPage = (function() {
     // 依時間正序算累計餘額，顯示時反轉（最新在上）
     // v2.1.2 修正：_run 只放顯示用 map，不可寫進存檔物件本體
     //（否則每新增一筆流水全部舊流水 _run 都變，與雲端回傳值比對不同 → 每輪同步被誤判真衝突狂跳 Toast）
-    var entries = Wallet.getAll().slice().sort(function(a, b) { return (a.createdAt || 0) - (b.createdAt || 0); });
+    // v2.4.11 與 WEB v1.7.12 對齊：只顯示未封存流水（封存團明細隱藏，可在歷史查詢查對）；餘額只算未封存
+    var allTx = Wallet.getAll();
+    var sealedCount = allTx.filter(function(w) { return w.sealedAt; }).length;
+    var entries = allTx.filter(function(w) { return !w.sealedAt; }).slice().sort(function(a, b) { return (a.createdAt || 0) - (b.createdAt || 0); });
     var run = 0;
     var runMap = {};
     entries.forEach(function(w) { run += (w.amountHKD || 0); runMap[w.id] = run; });
-    var bal = Wallet.balance();
+    var bal = entries.reduce(function(s, w) { return s + (w.amountHKD || 0); }, 0);
 
     var today = TWDate.todayStr();
     var weekStart = _daysAgoStr(6);
@@ -9203,6 +9720,12 @@ var WalletPage = (function() {
     html += '<div class="wallet-balance-num">HK$ ' + fmtHK(bal) + '</div>';
     if (bal < 0) html += '<div class="wallet-balance-warn">' + ICONS.alert + ' 餘額為負，請立即對帳</div>';
     html += '</div>';
+
+    if (sealedCount > 0) {
+      /* 與 WEB v1.7.12 同款 inline 提示 */
+      html += '<div style="margin:8px 0 12px;padding:8px 12px;border-left:3px solid var(--accent);background:var(--bg-tertiary);font-size:var(--font-size-sm);color:var(--text-muted);">'
+        + '已封存 ' + sealedCount + ' 筆流水已隱藏（封存團明細），可在「歷史查詢」查看。</div>';
+    }
 
     html += '<div class="wallet-summary">';
     html += '<div><b>本日</b><br>收 ' + fmtHK(dayIn) + ' ／ 支 ' + fmtHK(dayOut) + '</div>';
@@ -9313,10 +9836,17 @@ var WalletPage = (function() {
   }
   function _doBatchDelete() {
     var ids = Object.keys(_batchSel).filter(function(k) { return _batchSel[k]; });
-    if (ids.length === 0) { Toast.warning('請先點選要刪除的補登流水'); return; }
-    Modal.confirm('確定刪除勾選的 ' + ids.length + ' 筆補登流水？', function() {
+    // v2.4.11 守門：已封存流水不可刪（正常 UI 已隱藏，此為殘留勾選/繞過防護）
+    var sealedTxs = ids.filter(function(id) { var w = Wallet.getById(id); return w && w.sealedAt; });
+    ids = ids.filter(function(id) { var w = Wallet.getById(id); return !(w && w.sealedAt); });
+    if (ids.length === 0) { Toast.warning('勾選的流水皆已封存，不可刪除'); _exitBatch(); return; }
+    var msg = '確定刪除勾選的 ' + ids.length + ' 筆補登流水？';
+    if (sealedTxs.length > 0) msg += '\n\n已略過 ' + sealedTxs.length + ' 筆已封存流水。';
+    Modal.confirm(msg, function() {
       var ok = 0, fail = 0;
       ids.forEach(function(id) {
+        var cur = Wallet.getById(id);
+        if (cur && cur.sealedAt) return; // v2.4.11 防繞過
         if (Wallet.removeManual(id)) ok++; else fail++;
       });
       _batchMode = false;
@@ -9782,6 +10312,7 @@ var WalletPage = (function() {
   function showEditManual(id) {
     var w = Wallet.getById(id);
     if (!w || w.type !== 'manual') return;
+    if (w.sealedAt) { Toast.warning('此流水所屬團已封存，不可編輯'); return; } // v2.4.11
     var html = '';
     html += '<div class="form-row">';
     html += '<div class="form-group"><label>方向</label><select id="wm-dir" class="form-input"><option value="in"' + ((w.amountHKD || 0) >= 0 ? ' selected' : '') + '>收入（現鈔進來）</option><option value="out"' + ((w.amountHKD || 0) < 0 ? ' selected' : '') + '>支出（現鈔出去）</option></select></div>';
@@ -9800,6 +10331,8 @@ var WalletPage = (function() {
     Modal.open('編輯補登', html);
   }
   function saveEditManual(id) {
+    var cur = Wallet.getById(id);
+    if (cur && cur.sealedAt) { Toast.warning('此流水所屬團已封存，不可編輯'); return; } // v2.4.11
     var dir = document.getElementById('wm-dir').value;
     var amt = parseFloat(document.getElementById('wm-amt').value);
     if (isNaN(amt) || amt <= 0) { Toast.error('請輸入正確金額'); return; }
@@ -9814,7 +10347,11 @@ var WalletPage = (function() {
     render();
   }
   function delManual(id) {
+    var w = Wallet.getById(id);
+    if (w && w.sealedAt) { Toast.warning('此流水所屬團已封存，不可刪除'); return; } // v2.4.11
     Modal.confirm('確定刪除這筆補登？', function() {
+      var cur = Wallet.getById(id);
+      if (cur && cur.sealedAt) { Toast.warning('此流水所屬團已封存，不可刪除'); return; } // v2.4.11
       if (Wallet.removeManual(id)) {
         Toast.success('已刪除');
         render();
@@ -9828,6 +10365,7 @@ var WalletPage = (function() {
   function showEditOpen(id) {
     var w = Wallet.getById(id);
     if (!w || w.type !== 'open') return;
+    if (w.sealedAt) { Toast.warning('此流水所屬團已封存，不可編輯'); return; } // v2.4.11
     var html = '';
     html += '<div class="form-group"><label>開帳金額(HK$)</label><input type="number" inputmode="decimal" step="1" min="0" id="wo-amt" class="form-input" value="' + (w.amountHKD || 0) + '"></div>';
     html += '<div class="form-group"><label>開帳日期</label><input type="date" id="wo-date" class="form-input" value="' + (w.date || TWDate.todayStr()) + '"></div>';
@@ -9836,6 +10374,8 @@ var WalletPage = (function() {
     Modal.open('編輯開帳', html);
   }
   function saveEditOpen(id) {
+    var cur = Wallet.getById(id);
+    if (cur && cur.sealedAt) { Toast.warning('此流水所屬團已封存，不可編輯'); return; } // v2.4.11
     var amt = parseFloat(document.getElementById('wo-amt').value);
     if (isNaN(amt) || amt < 0) { Toast.error('請輸入正確金額'); return; }
     Wallet.updateOpen(id, {
@@ -9848,7 +10388,11 @@ var WalletPage = (function() {
     render();
   }
   function delOpen(id) {
+    var w = Wallet.getById(id);
+    if (w && w.sealedAt) { Toast.warning('此流水所屬團已封存，不可刪除'); return; } // v2.4.11
     Modal.confirm('確定刪除開帳？僅限錢包只有開帳這一筆時可刪（刪後回到未開帳，可重新開帳）。', function() {
+      var cur = Wallet.getById(id);
+      if (cur && cur.sealedAt) { Toast.warning('此流水所屬團已封存，不可刪除'); return; } // v2.4.11
       if (Wallet.removeOpen(id)) {
         Toast.success('已刪除開帳，請重新開帳');
         render();
@@ -12140,6 +12684,7 @@ var AgentPage = (function() {
  */
 var ShareholderPage = (function() {
   var _currentMonth = '';
+  var _selectedMonth = ''; // v2.4.11 月份切換：可查任意月份分潤（快照月份顯示固定數字）
 
   function hallClass(hallId) {
     if (hallId === 'lyi') return 'sh-hall-lyi';
@@ -12164,12 +12709,19 @@ var ShareholderPage = (function() {
     var mtxs = MemberTxs.getAll();
     var settings = Settings.get();
     var halls = Settings.getVipHalls();
-    _currentMonth = TWDate.monthStr();
+    /* v2.4.11 月份切換：_selectedMonth 由月份列決定，預設當月 */
+    if (!_selectedMonth) _selectedMonth = TWDate.monthStr();
+    _currentMonth = _selectedMonth;
 
     // 當月交易
     var monthTxs = mtxs.filter(function(t) {
       return t.date && t.date.substring(0, 7) === _currentMonth;
     });
+
+    /* v2.4.11 分潤月報快照：該月已固定 → 一律用快照數字（不可變），全頁只讀 */
+    var _frozen = false;
+    var _snap = (typeof ProfitSnapshots !== 'undefined') ? ProfitSnapshots.getByMonth(_currentMonth) : null;
+    if (_snap && _snap.report) _frozen = true;
 
     // 輔助：取得交易廳 ID（交易自身 vipHallId 優先，無指定才回退到團 hallIds）
     function getHallId(tx) {
@@ -12303,8 +12855,65 @@ var ShareholderPage = (function() {
 
     var totalShares = shareholders.reduce(function(s, sh) { return s + (sh.shares || 0); }, 0);
 
+    /* v2.4.11 快照月份：一律以快照數字為準（固定不可變，改費率/股東/額外收入不影響） */
+    var _report = null;
+    if (_frozen && _snap && _snap.report) {
+      _report = _snap.report;
+      totalWash = _report.totals.wash;
+      totalStandardWash = _report.totals.standardWash;
+      totalProfit = _report.totals.profit;
+      totalRebate = _report.totals.rebate;
+      totalMonthlyOnlyRebate = _report.totals.monthlyOnlyRebate;
+      grandTotal = _report.totals.grandTotal;
+      totalTicketProfit = _report.totals.ticketProfit;
+      totalExtra = _report.totals.extra;
+      extraProfit = totalExtra - totalTicketProfit;
+      exchangeRate = _report.exchangeRate;
+      totalShares = _report.totalShares;
+      extraIncomes = _report.extraIncomes || [];
+      ticketProfits = _report.ticketProfits || [];
+      hallData = {};
+      hallWash = {};
+      _report.halls.forEach(function(h) {
+        hallWash[h.id] = h.wash;
+        hallData[h.id] = {
+          wash: h.wash, standardWash: h.standardWash, monthlyOnlyWash: h.monthlyOnlyWash,
+          profit: h.profit, rebate: h.rebate, standardRebate: h.standardRebate,
+          monthlyOnlyRebate: h.monthlyOnlyRebate, total: h.total,
+        };
+      });
+      /* 費率藥丸用快照當時費率 */
+      halls = _report.halls.map(function(h) {
+        return { id: h.id, name: h.name, rate: h.rate, cashRate: h.cashRate, rebateRate: h.rebateRate };
+      });
+    }
+
     var html = '';
     html += '<div class="sh-page">';
+
+    /* v2.4.11 月份切換列：可查任意月份（快照月份標示「已固定」） */
+    html += '<div class="sh-month-bar">';
+    html += '<label>月份</label>';
+    html += '<select class="form-input" onchange="ShareholderPage.selectMonth(this.value)">';
+    var monthSet = {};
+    mtxs.forEach(function(t) { if (t.date) monthSet[t.date.substring(0, 7)] = true; });
+    if (settings.monthlyRates) {
+      Object.keys(settings.monthlyRates).forEach(function(m) { if (/^\d{4}-\d{2}$/.test(m)) monthSet[m] = true; });
+    }
+    /* v2.4.11 快照月份也要可選（即使該月交易已刪除） */
+    if (typeof ProfitSnapshots !== 'undefined') {
+      (ProfitSnapshots.getAll() || []).forEach(function(s) { if (s && s.month) monthSet[s.month] = true; });
+    }
+    monthSet[_currentMonth] = true;
+    Object.keys(monthSet).sort().reverse().forEach(function(m) {
+      html += '<option value="' + m + '"' + (m === _currentMonth ? ' selected' : '') + '>' + m + '</option>';
+    });
+    html += '</select>';
+    if (_frozen) {
+      html += '<span class="ht-sealed-badge">已固定</span>';
+      html += '<span style="font-size:var(--font-size-sm);color:var(--text-muted);">此月份分潤已封存固定，之後改費率/股東/額外收入不影響此月數字</span>';
+    }
+    html += '</div>';
 
     // ===== 1. 摘要條 + 費率條件（合併） =====
     html += '<div class="sh-summary-bar">';
@@ -12325,7 +12934,8 @@ var ShareholderPage = (function() {
       var cashPct = ((hall.cashRate || hall.rate) * 100).toFixed(2);
       var rebatePct = (hall.rebateRate * 100).toFixed(2);
       var totalPct = (hall.rate * 100).toFixed(2);
-      html += '<div class="sh-rate-pill ' + hallClass(hall.id) + '" onclick="ShareholderPage.editRate(\'' + hall.id + '\')">';
+      /* v2.4.11 快照月份費率藥丸只讀（顯示當時費率，不可編輯） */
+      html += '<div class="sh-rate-pill ' + hallClass(hall.id) + (_frozen ? ' sh-rate-pill-readonly' : '') + '"' + (_frozen ? '' : ' onclick="ShareholderPage.editRate(\'' + hall.id + '\')"') + '>';
       html += '<span class="sh-rate-dot"></span>';
       html += '<span class="sh-rate-name">' + esc(hall.name) + '</span>';
       html += '<span class="sh-rate-vals">退傭<b>' + totalPct + '</b>/現結<b>' + cashPct + '</b>/月退<b>' + rebatePct + '</b></span>';
@@ -12339,16 +12949,18 @@ var ShareholderPage = (function() {
     html += '<div class="sh-card-header">';
     html += '<h3 class="sh-section-title">分潤明細</h3>';
     html += '<div>';
+    html += '<button class="btn-sm" onclick="PdfExport.exportShareholderReport(\'' + _currentMonth + '\')">匯出分潤月報PDF</button> ';
     html += '<button class="btn-sm" onclick="PdfExport.exportShareholder()">匯出全部PDF</button> ';
-    html += '<button class="btn btn-primary btn-sm" onclick="ShareholderPage.showAdd()">+ 新增股東</button>';
+    /* v2.4.11 快照月份只讀：不顯示新增股東 */
+    if (!_frozen) html += '<button class="btn btn-primary btn-sm" onclick="ShareholderPage.showAdd()">+ 新增股東</button>';
     html += '</div>';
     html += '</div>';
 
-    // 匯率藥丸
+    // 匯率藥丸（v2.4.11 快照月份只讀）
     html += '<div class="sh-rate-row">';
-    html += '<div class="sh-exchange-pill">';
+    html += '<div class="sh-exchange-pill' + (_frozen ? ' sh-exchange-fixed' : '') + '">';
     html += '<label>1 HKD =</label>';
-    html += '<input type="number" step="0.01" value="' + exchangeRate + '" onchange="ShareholderPage.updateRate(this.value)">';
+    html += '<input type="number" step="0.01" value="' + exchangeRate + '"' + (_frozen ? ' readonly' : ' onchange="ShareholderPage.updateRate(this.value)"') + '>';
     html += '<span class="sh-exchange-unit">TWD</span>';
     html += '</div>';
     html += '</div>';
@@ -12357,7 +12969,8 @@ var ShareholderPage = (function() {
       html += '<div class="table-wrapper"><table class="sh-profit-table"><thead><tr>';
       html += '<th>股東</th><th>持股</th><th>洗碼(萬)</th>';
       html += '<th class="num">資金股50%(HK)</th><th class="cell-center">貢獻度</th><th class="num">貢獻可得(HK)</th><th class="num">特殊月退(HK)</th><th class="num">額外收入(HK)</th>';
-      html += '<th class="num">合計應付(HK)</th><th class="num">合計應付(TW)</th><th class="cell-center">操作</th>';
+      html += '<th class="num">合計應付(HK)</th><th class="num">合計應付(TW)</th>';
+      if (!_frozen) html += '<th class="cell-center">操作</th>';
       html += '</tr></thead><tbody>';
 
       var SH_COLORS = ['#378ADD', '#1D9E75', '#EF9F27', '#D4537E', '#7F77DD'];
@@ -12366,9 +12979,17 @@ var ShareholderPage = (function() {
       var totalMonthlyOnlyWash = 0; // 各股東 monthlyOnlyWash 合計（特殊代理）
       var contribData = [];
       shareholders.forEach(function(sh, idx) {
-        var profitData = calcShareholderProfit(sh, monthTxs, settings, _currentMonth);
-        var totalData = calcShareholderTotal(profitData, shareholders, totalStandardWash, grandTotal, totalExtra, totalMonthlyOnlyRebate);
-        var extraShare = totalExtra * (sh.shares / totalShares);
+        /* v2.4.11 快照月份：用快照已算好的分潤數字（不重新計算） */
+        var profitData, totalData, extraShare;
+        if (_frozen && _report) {
+          var row = _report.shareholders.find(function(r) { return r.sh && r.sh.id === sh.id; });
+          if (row) { profitData = row.profitData; totalData = row.totalData; extraShare = row.extraShare; }
+        }
+        if (!profitData) {
+          profitData = calcShareholderProfit(sh, monthTxs, settings, _currentMonth);
+          totalData = calcShareholderTotal(profitData, shareholders, totalStandardWash, grandTotal, totalExtra, totalMonthlyOnlyRebate);
+          extraShare = totalExtra * (sh.shares / totalShares);
+        }
         sumHK += totalData.totalPayableHK;
         sumTW += totalData.totalPayableTW;
         totalPersonalWash += profitData.personalWash;
@@ -12397,10 +13018,13 @@ var ShareholderPage = (function() {
         html += '<td class="num">' + fmtHK(extraShare) + '</td>';
         html += '<td class="num">' + fmtHK(totalData.totalPayableHK) + '</td>';
         html += '<td class="num num-positive">' + fmtHK(totalData.totalPayableTW) + '</td>';
-        html += '<td class="cell-center-nowrap">';
-        html += '<button class="btn-sm" onclick="ShareholderPage.editShareholder(\'' + sh.id + '\')">編輯</button> ';
-        html += '<button class="btn-sm btn-danger" onclick="ShareholderPage.delShareholder(\'' + sh.id + '\')">刪</button>';
-        html += '</td>';
+        /* v2.4.11 快照月份只讀：整欄操作列不渲染（與 WEB v1.7.12 對齊） */
+        if (!_frozen) {
+          html += '<td style="text-align:center;white-space:nowrap;">';
+          html += '<button class="btn-sm" onclick="ShareholderPage.editShareholder(\'' + sh.id + '\')">編輯</button> ';
+          html += '<button class="btn-sm btn-danger" onclick="ShareholderPage.delShareholder(\'' + sh.id + '\')">刪</button>';
+          html += '</td>';
+        }
         html += '</tr>';
       });
 
@@ -12416,7 +13040,7 @@ var ShareholderPage = (function() {
       html += '<td class="num">—</td><td class="cell-center">' + totalContribPct + '%</td><td class="num">—</td><td class="num">' + fmtHK(totalMonthlyOnlyRebate) + '</td><td class="num">' + fmtHK(totalExtra) + '</td>';
       html += '<td class="num">' + fmtHK(sumHK) + '</td>';
       html += '<td class="num num-positive">' + fmtHK(sumTW) + '</td>';
-      html += '<td></td>';
+      if (!_frozen) html += '<td></td>';
       html += '</tr>';
       html += '</tbody></table></div>';
 
@@ -12540,7 +13164,7 @@ var ShareholderPage = (function() {
     html += '<div class="sh-chart-card">';
     html += '<div class="sh-card-header" style="padding-left:0;padding-right:0;">';
     html += '<h4>額外收入</h4>';
-    html += '<button class="btn-sm" onclick="ShareholderPage.showAddExtra()">+ 新增</button>';
+    if (!_frozen) html += '<button class="btn-sm" onclick="ShareholderPage.showAddExtra()">+ 新增</button>';
     html += '</div>';
     if (extraIncomes.length > 0 || ticketProfits.length > 0) {
       html += '<div class="table-wrapper"><table class="sh-extra-table"><thead><tr>';
@@ -12551,8 +13175,13 @@ var ShareholderPage = (function() {
         html += '<tr>';
         html += '<td>' + (e.description || '') + '</td>';
         html += '<td class="num">' + fmtHK(e.amountHK || 0) + '</td>';
-        html += '<td><button class="btn-sm" onclick="ShareholderPage.editExtra(\'' + e.id + '\')">編輯</button> ';
-        html += '<button class="btn-sm btn-danger" onclick="ShareholderPage.delExtra(\'' + e.id + '\')">刪</button></td>';
+        /* v2.4.11 快照月份只讀：不顯示編輯/刪除 */
+        if (_frozen) {
+          html += '<td style="color:var(--text-secondary);font-size:var(--font-size-sm);">固定</td>';
+        } else {
+          html += '<td><button class="btn-sm" onclick="ShareholderPage.editExtra(\'' + e.id + '\')">編輯</button> ';
+          html += '<button class="btn-sm btn-danger" onclick="ShareholderPage.delExtra(\'' + e.id + '\')">刪</button></td>';
+        }
         html += '</tr>';
       });
       // 門票利潤（只讀）
@@ -12581,7 +13210,13 @@ var ShareholderPage = (function() {
       html += '<div class="sh-card-header"><h3 class="sh-section-title">各股東洗碼 KPI</h3></div>';
       html += '<div class="sh-kpi-grid">';
       shareholders.forEach(function(sh) {
-        var profitData = calcShareholderProfit(sh, monthTxs, settings, _currentMonth);
+        /* v2.4.11 快照月份：KPI 用快照已算好的 profitData（不重新計算） */
+        var profitData;
+        if (_frozen && _report) {
+          var krow = _report.shareholders.find(function(r) { return r.sh && r.sh.id === sh.id; });
+          if (krow) profitData = krow.profitData;
+        }
+        if (!profitData) profitData = calcShareholderProfit(sh, monthTxs, settings, _currentMonth);
         var shWash = profitData.personalWash;
         var moWash = profitData.monthlyOnlyWash || 0;
         var sharePct = totalShares > 0 ? (sh.shares / totalShares * 100).toFixed(1) : '0';
@@ -12628,6 +13263,12 @@ var ShareholderPage = (function() {
 
     var container = document.getElementById('page-shareholder');
     if (container) container.innerHTML = html;
+  }
+
+  /* v2.4.11 月份切換（切到已固定月份 → 顯示快照固定數據） */
+  function selectMonth(month) {
+    _selectedMonth = month;
+    render();
   }
 
   // ========== 匯率更新 ==========
@@ -13088,6 +13729,29 @@ var HistoryPage = (function() {
     return hall ? hall.name : hallId;
   }
 
+  /* v2.4.11 歷史查詢補顯示用工具（與 WEB v1.7.12 同款） */
+  function escHtml(s) {
+    return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+  function fmtHK(n) {
+    var v = Math.round(n || 0);
+    return (v >= 0 ? '' : '-') + Math.abs(v).toLocaleString();
+  }
+  function wtxTypeLabel(t) {
+    var labels = {
+      'open': '開帳', 'opening': '開帳', 'deposit': '補登', 'manual': '補登',
+      'loan': '借支', 'repay': '借支回收', 'loan_repay': '借支回收',
+      'payout': '開銷墊付', 'expense': '開銷實支', 'adjust': '調整',
+      'member_tx': '現金碼', 'credit_tx': '信用碼超贏', 'pexp': '預支開銷',
+    };
+    return labels[t] || t || '';
+  }
+  function memberName(id) {
+    if (!id) return '';
+    var m = (State.get('members') || []).find(function(m) { return m.id === id; });
+    return m ? (m.name || m.id) : id;
+  }
+
   function render() {
     var sealedTrips = Trips.getAll().filter(function(t) { return t.status === TRIP_STATUS.SEALED; });
     var html = '<div class="card">';
@@ -13266,6 +13930,51 @@ var HistoryPage = (function() {
       html += '</tbody></table>';
     } else {
       html += Icons.empty('此團無帳務記錄', '此團尚無任何帳務交易');
+    }
+
+    /* v2.4.11 已封存明細查對：該團預支開銷 + 錢包流水（錢包頁只顯示未封存，完整明細在此查看） */
+    var pendExps = (typeof PendExps !== 'undefined' && PendExps.getByTrip) ? PendExps.getByTrip(trip.id) : [];
+    var tripWalletTxs = (State.get('walletTxs') || []).filter(function(w) { return !w._deleted && w.tripId === trip.id; });
+
+    if (pendExps.length > 0) {
+      html += '<div class="ht-detail-block">';
+      html += '<div class="ht-detail-title">' + ICONS.file + ' 預支開銷（' + pendExps.length + ' 單）</div>';
+      pendExps.forEach(function(p) {
+        var rowsTotal = (p.rows || []).reduce(function(s, r) { return s + (r.amountHK || 0); }, 0);
+        html += '<div class="ht-detail-item">';
+        html += '<div class="ht-detail-head"><span>' + escHtml(p.date || '') + '</span><span class="num" style="font-weight:600;">HK$ ' + fmtHK(rowsTotal) + '</span></div>';
+        if (p.rows && p.rows.length > 0) {
+          html += '<table class="data-table"><thead><tr><th>品名</th><th class="num">數量</th><th class="num">單價(HK$)</th><th class="num">小計(HK$)</th></tr></thead><tbody>';
+          p.rows.forEach(function(r) {
+            var qty = r.quantity || 1;
+            html += '<tr><td>' + escHtml(r.name || '') + '</td><td class="num">' + qty + '</td><td class="num">' + fmtHK(r.unitPrice || 0) + '</td><td class="num">' + fmtHK(r.amountHK || 0) + '</td></tr>';
+          });
+          html += '</tbody></table>';
+        }
+        if (p.note) html += '<div class="ht-detail-note">備註：' + escHtml(p.note) + '</div>';
+        html += '</div>';
+      });
+      html += '</div>';
+    }
+
+    if (tripWalletTxs.length > 0) {
+      html += '<div class="ht-detail-block">';
+      html += '<div class="ht-detail-title">' + ICONS.chart + ' 錢包流水（' + tripWalletTxs.length + ' 筆）</div>';
+      html += '<div class="table-wrapper"><table class="data-table"><thead><tr>';
+      html += '<th>日期</th><th>類型</th><th class="num">金額(HK$)</th><th>會員</th><th>備註</th>';
+      html += '</tr></thead><tbody>';
+      tripWalletTxs.forEach(function(w) {
+        var amt = w.amountHKD || 0;
+        html += '<tr>';
+        html += '<td>' + escHtml(w.date || '') + '</td>';
+        html += '<td>' + escHtml(wtxTypeLabel(w.type)) + '</td>';
+        html += '<td class="num" style="' + (amt >= 0 ? 'color:var(--success)' : 'color:var(--danger)') + ';">' + fmtHK(amt) + '</td>';
+        html += '<td>' + escHtml(memberName(w.memberId)) + '</td>';
+        html += '<td>' + escHtml(w.note || '') + '</td>';
+        html += '</tr>';
+      });
+      html += '</tbody></table></div>';
+      html += '</div>';
     }
 
     // 底部 KPI
@@ -14485,7 +15194,7 @@ var AuditLogPage = (function() {
     if (actorSel) actorSel.onchange = function() { _filters.actorId = actorSel.value; render(); };
   }
 
-  return { render: render };
+  return { render: render, selectMonth: selectMonth };
 })();
 
 
@@ -14644,6 +15353,7 @@ function loadAllData() {
   HotelConfig.load();
   Users.load(); // Phase 1A 帳號集合
   AuditLog.load(); // Phase 1B 審計紀錄
+  ProfitSnapshots.load(); // v2.4.11 分潤月報快照（月底固定）
   /* EMPLOYEE_LIST: 物件結構，直接從 localStorage 讀取 */
   State.set('employeeList', Store.read(STORAGE_KEYS.EMPLOYEE_LIST) || {});
   RecentlyDeleted.init();
@@ -14778,6 +15488,7 @@ function initApp() {
         EMPLOYEE_LIST: State.get('employeeList'),
         USERS: State.get('users'),
         AUDIT_LOG: State.get('auditLog'),
+        PROFIT_SNAPSHOTS: State.get('profitSnapshots'), // v2.4.11 分潤月報快照
       });
     } else {
       console.warn('[App] Firebase 未连接，离线模式');
@@ -15503,6 +16214,7 @@ var MobileSync = (function() {
           EXTRA_INCOME: State.get('extraIncome'),
           HOTEL_CONFIG: State.get('hotelConfig'),
           EMPLOYEE_LIST: State.get('employeeList'),
+          PROFIT_SNAPSHOTS: State.get('profitSnapshots'), // v2.4.11 分潤月報快照
         });
       }
 
