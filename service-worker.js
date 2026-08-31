@@ -6,7 +6,7 @@
  *   - 其他 → stale-while-revalidate
  */
 
-var CACHE_VERSION = 'tw-app-v2.4.10';  /// 2026-08-31 v2.4.10 員工送待結帳（僅送件，撤回需會計/管理員）+ 兩端 topbar 改密碼 Modal（員工自助）+ 設定頁修改密碼統一 Modal。同 WEB v1.7.11
+var CACHE_VERSION = 'tw-app-v2.4.11';  /// 2026-08-31 v2.4.11 三大封存需求（與 WEB v1.7.12 對齊）：(1) 按月批量封存（PendingPage 按鈕+月份下拉，級聯封存帳務/預支/錢包流水）；(2) 已封存團錢包流水/預支隱藏到歷史查詢（錢包頁只顯示未封存、編輯/刪除/批量刪除守門，歷史查詢補顯示預支開銷+錢包流水明細）；(3) 股東分潤月報快照（ProfitSnapshots，批量封存自動固定該月分潤，分潤頁月份切換+快照全頁只讀+匯出分潤月報 PDF）
 var STATIC_CACHE = CACHE_VERSION + '-static';
 var RUNTIME_CACHE = CACHE_VERSION + '-runtime';
 
