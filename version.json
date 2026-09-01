@@ -1,7 +1,7 @@
 {
-  "version": "v2.4.12_1788237379",
-  "buildTime": 1788237379,
+  "version": "v2.4.13_1788240914",
+  "buildTime": 1788240914,
   "date": "2026-09-01",
   "dataRoot": "taiwan_data/pilot",
-  "notes": "白屏修復：登入後畫面全白 — AuditLogPage 的 return 誤引用了未定義的 selectMonth（自 ShareholderPage 複製殘留），嚴格模式下拋 ReferenceError 中斷整支 app.js（後半段模組/底部導航全未初始化）。已移除無效引用並驗證。"
+  "notes": "版本輪詢自動重載：VersionCheck 模組每 15 分鐘+回前景時檢查 version.json，發現新版自動更新並重載（Modal 開啟或輸入中則延後）；SW 修正 — version.json 一律走網路不快取、靜態資源比對改後綴匹配（原 indexOf 在 GitHub Pages 子路徑下全部漏接）。"
 }
