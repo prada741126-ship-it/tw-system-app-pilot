@@ -7,7 +7,7 @@
  *   - 其他 → stale-while-revalidate
  */
 
-var CACHE_VERSION = 'tw-app-v2.4.13';  // 2026-09-01 v2.4.13 版本輪詢自動重載：新增 VersionCheck 模組（15分鐘+回前景檢查 version.json，發現新版自動更新重載）；SW 修正 version.json 不快取、靜態資源比對改用後綴匹配（GitHub Pages 子路徑下 pathname 含 /tw-system-app-pilot/ 前綴，原本 indexOf 全部漏接）
+var CACHE_VERSION = 'tw-app-v2.4.14';  // 2026-09-01 v2.4.14 種入延遲決策：Catalog/HotelConfig 首載不立即種預設，先探雲端（有資料就不種，防新裝置重複批次污染）；cacheFirst 加 ignoreSearch（app.js?v= 時間戳引用才能命中預快取，離線可用）
 var STATIC_CACHE = CACHE_VERSION + '-static';
 var RUNTIME_CACHE = CACHE_VERSION + '-runtime';
 
@@ -129,9 +129,12 @@ function matchStaticAsset(pathname) {
 // 快取策略函數
 // =========================================================================
 function cacheFirst(request) {
-  return caches.match(request).then(function(cached) {
+  // ignoreSearch: index.html 以 ?v= 時間戳引用 app.js/app.css，忽略查詢參數才能命中預快取（離線亦可用）
+  return caches.match(request, { ignoreSearch: true }).then(function(cached) {
     return cached || fetch(request).then(function(response) {
       return cacheResponse(request, response);
+    }).catch(function() {
+      return Response.error(); // 離線且快取未命中
     });
   });
 }
