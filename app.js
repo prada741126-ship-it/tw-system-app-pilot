@@ -1,5 +1,5 @@
-// [BUILD] v2.4.8_1788104698
-window.TW_BUILD_VERSION = "v2.4.11_1788185399";
+// [BUILD] v2.4.12_1788237379
+window.TW_BUILD_VERSION = "v2.4.12_1788237379";
 
 // [DEV BUILD] 測試環境 — 資料導向 taiwan_data_dev/，不污染正式資料
 window.TW_DEV_MODE = true;
@@ -15194,7 +15194,7 @@ var AuditLogPage = (function() {
     if (actorSel) actorSel.onchange = function() { _filters.actorId = actorSel.value; render(); };
   }
 
-  return { render: render, selectMonth: selectMonth };
+  return { render: render };
 })();
 
 
