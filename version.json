@@ -1,7 +1,7 @@
 {
-  "version": "v2.4.13_1788240914",
-  "buildTime": 1788240914,
+  "version": "v2.4.14_1788243248",
+  "buildTime": 1788243248,
   "date": "2026-09-01",
   "dataRoot": "taiwan_data/pilot",
-  "notes": "版本輪詢自動重載：VersionCheck 模組每 15 分鐘+回前景時檢查 version.json，發現新版自動更新並重載（Modal 開啟或輸入中則延後）；SW 修正 — version.json 一律走網路不快取、靜態資源比對改後綴匹配（原 indexOf 在 GitHub Pages 子路徑下全部漏接）。"
+  "notes": "種入延遲決策：新裝置首次載入不再立即種入預設品項/酒店配置，先探雲端——雲端已有資料（含墓碑）就不種，由同步合併帶入；雲端全空才種入並上傳。修復每支新裝置登入都產生重複批次污染 Firebase 的問題。SW：cacheFirst 加 ignoreSearch（?v= 時間戳引用可命中預快取，離線可用）。"
 }
