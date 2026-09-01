@@ -2,11 +2,12 @@
  * service-worker.js — PWA 離線快取 + 背景同步
  * 快取策略：
  *   - app.js / app.css / index.html → 快取優先（Cache-First）
+ *   - version.json → 一律走網路（不快取，供版本輪詢偵測新版）
  *   - Firebase / CDN 資源 → 網路優先（Network-First），失敗回退快取
  *   - 其他 → stale-while-revalidate
  */
 
-var CACHE_VERSION = 'tw-app-v2.4.12';  /// 2026-09-01 v2.4.12 白屏修復：AuditLogPage 的 return 誤引用未定義 selectMonth（自 ShareholderPage 複製殘留）→ 嚴格模式 ReferenceError 中斷整支 app.js，造成登入後白屏；已移除無效引用
+var CACHE_VERSION = 'tw-app-v2.4.13';  // 2026-09-01 v2.4.13 版本輪詢自動重載：新增 VersionCheck 模組（15分鐘+回前景檢查 version.json，發現新版自動更新重載）；SW 修正 version.json 不快取、靜態資源比對改用後綴匹配（GitHub Pages 子路徑下 pathname 含 /tw-system-app-pilot/ 前綴，原本 indexOf 全部漏接）
 var STATIC_CACHE = CACHE_VERSION + '-static';
 var RUNTIME_CACHE = CACHE_VERSION + '-runtime';
 
@@ -16,7 +17,6 @@ var STATIC_ASSETS = [
   './app.js',
   './app.css',
   './manifest.json',
-  './version.json',
   './icons/icon-192.png',
   './icons/icon-512.png',
   './icons/brand-360.png',
@@ -89,12 +89,20 @@ self.addEventListener('fetch', function(event) {
     return;
   }
 
-  // 本地靜態資源 → 快取優先
-  if (STATIC_ASSETS.indexOf(url.pathname) !== -1 ||
-      url.pathname === '/' ||
-      url.pathname === '/index.html' ||
-      url.pathname === '/app.js' ||
-      url.pathname === '/app.css') {
+  // version.json → 一律走網路（版本輪詢依賴即時內容，絕不快取；離線回空版本避免誤觸更新）
+  if (url.pathname.indexOf('version.json') !== -1) {
+    event.respondWith(
+      fetch(event.request).catch(function() {
+        return new Response(JSON.stringify({ version: '' }), {
+          headers: { 'Content-Type': 'application/json' }
+        });
+      })
+    );
+    return;
+  }
+
+  // 本地靜態資源 → 快取優先（以路徑後綴比對，相容 GitHub Pages 子路徑部署）
+  if (matchStaticAsset(url.pathname)) {
     event.respondWith(cacheFirst(event.request));
     return;
   }
@@ -102,6 +110,20 @@ self.addEventListener('fetch', function(event) {
   // 其他 → stale-while-revalidate
   event.respondWith(staleWhileRevalidate(event.request));
 });
+
+// 靜態資源後綴匹配：pathname 可能含 repo 子路徑（如 /tw-system-app-pilot/app.js）
+function matchStaticAsset(pathname) {
+  if (pathname === '/' || pathname === '/index.html') return true;
+  for (var i = 0; i < STATIC_ASSETS.length; i++) {
+    var asset = STATIC_ASSETS[i];
+    if (asset === './') {
+      if (pathname === '/' || /\/$/.test(pathname)) return true;
+    } else if (pathname === asset || pathname.endsWith(asset.slice(1))) {
+      return true;
+    }
+  }
+  return false;
+}
 
 // =========================================================================
 // 快取策略函數
