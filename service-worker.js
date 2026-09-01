@@ -7,7 +7,7 @@
  *   - 其他 → stale-while-revalidate
  */
 
-var CACHE_VERSION = 'tw-app-v2.4.16';  // 2026-09-01 v2.4.16 清理未就緒時延遲重試（防登入後認證慢錯過）
+var CACHE_VERSION = 'tw-app-v2.4.17';  // 2026-09-01 v2.4.17 重置本地資料保留登入 session（不再被登出）
 var STATIC_CACHE = CACHE_VERSION + '-static';
 var RUNTIME_CACHE = CACHE_VERSION + '-runtime';
 
