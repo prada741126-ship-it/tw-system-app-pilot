@@ -1,5 +1,5 @@
-// [BUILD] v2.4.13_1788240914
-window.TW_BUILD_VERSION = "v2.4.13_1788240914";
+// [BUILD] v2.4.14_1788243248
+window.TW_BUILD_VERSION = "v2.4.14_1788243248";
 
 // [DEV BUILD] 測試環境 — 資料導向 taiwan_data_dev/，不污染正式資料
 window.TW_DEV_MODE = true;
@@ -2360,6 +2360,42 @@ var Uploader = {
   enqueue: enqueue,
   syncUploadAll: syncUploadAll,
 };
+
+
+// === v2.4.14 種入延遲決策（防新裝置重複批次污染）===
+/**
+ * deferSeedDecision(opts) — 新裝置首次載入的種入閘門：
+ * localStorage 為空時不立即種預設，先探雲端 ——— 雲端已有任何記錄（含墓碑）就不種，
+ * 由 watcher 合併雲端資料；雲端全空才種入並上傳（首次裝置建立基準資料）。
+ * 修復：每支新裝置登入都重種一批預設 → catalog/hotelConfig 重複批次污染 Firebase。
+ * 依賴: sync/firebase.js, sync/uploader.js, core/state.js, core/store.js
+ */
+function deferSeedDecision(opts) {
+  var stateKey = opts.stateKey, storeKey = opts.storeKey, fbPath = opts.fbPath;
+  var seed = opts.seed, eventName = opts.eventName;
+  function _probe() {
+    if (typeof FirebaseSync === 'undefined' || !FirebaseSync.isReady()) return false;
+    FirebaseSync.once(fbPath).then(function(remote) {
+      // 雲端有任何記錄（含墓碑）→ 不種：尊重既有資料與用戶刪除意圖，watcher 會合併進來
+      if (remote && Object.keys(remote).length > 0) return;
+      // 探測期間 watcher 已先送入資料 → 不種
+      if ((State.get(stateKey) || []).length > 0) return;
+      // 雲端全空 → 種入（本機 + 上傳，首次裝置建立雲端基準）
+      var seeded = seed();
+      Store.writeArray(storeKey, seeded);
+      State.set(stateKey, seeded);
+      var obj = {};
+      seeded.forEach(function(r) { if (r && r._fbKey) obj[r._fbKey] = r; });
+      enqueue(fbPath, obj);
+      if (EVENTS[eventName]) EventBus.emit(EVENTS[eventName], seeded);
+    }).catch(function() { /* 雲端讀取失敗 → 不種，等 watcher 連線後合併 */ });
+    return true;
+  }
+  if (!_probe()) {
+    // Firebase 尚未就緒 → 等 init 完成再探（init 冪等，回同一個 promise）
+    FirebaseSync.init().then(function() { _probe(); });
+  }
+}
 
 
 // === src/sync/conflicts.js ===
@@ -4842,21 +4878,28 @@ var Catalog = (function() {
   function load() {
     var arr = Store.readArray(STORAGE_KEYS.CATALOG);
     if (!arr || arr.length === 0) {
-      // 首次載入 seed
-      var now = Date.now();
-      arr = SEED_ITEMS.map(function(it, i) {
-        return {
-          id: 'CATS' + (now + i),
-          name: it.name,
-          defaultPriceHK: it.defaultPriceHK || 0,
-          category: it.category || 'other',
-          isSeed: true,
-          createdAt: now,
-          _fbKey: 'CATS' + (now + i),
-          _updatedAt: now,
-        };
+      // v2.4.14: 不立即種入 — deferSeedDecision 探雲端後決定（雲端有資料就不種，防新裝置重複批次污染）
+      State.set('catalog', []);
+      deferSeedDecision({
+        stateKey: 'catalog', storeKey: STORAGE_KEYS.CATALOG, fbPath: FB_PATH.CATALOG,
+        eventName: 'CATALOG_LOADED',
+        seed: function() {
+          var now = Date.now();
+          return SEED_ITEMS.map(function(it, i) {
+            return {
+              id: 'CATS' + (now + i),
+              name: it.name,
+              defaultPriceHK: it.defaultPriceHK || 0,
+              category: it.category || 'other',
+              isSeed: true,
+              createdAt: now,
+              _fbKey: 'CATS' + (now + i),
+              _updatedAt: now,
+            };
+          });
+        },
       });
-      save(arr);
+      return [];
     }
     // v2.2.3 遷移：水舞間/水樂園改吃設定頁價格，舊 seed 未補價的軟刪（用戶已補價的保留）
     var now2 = Date.now();
@@ -5424,10 +5467,15 @@ var ExtraIncome = (function() {
 var HotelConfig = (function() {
   function load() {
     var arr = Store.readArray(STORAGE_KEYS.HOTEL_CONFIG);
-    /* 首次載入：若 localStorage 無資料，用 PRESET_HOTEL_CONFIG 初始化 */
+    /* v2.4.14: 不立即種入 — deferSeedDecision 探雲端後決定（雲端有資料就不種，防新裝置重複批次污染） */
     if (!arr || arr.length === 0) {
-      arr = seedFromPreset();
-      Store.writeArray(STORAGE_KEYS.HOTEL_CONFIG, arr);
+      State.set('hotelConfig', []);
+      deferSeedDecision({
+        stateKey: 'hotelConfig', storeKey: STORAGE_KEYS.HOTEL_CONFIG, fbPath: FB_PATH.HOTEL_CONFIG,
+        eventName: 'HOTEL_CONFIG_LOADED',
+        seed: seedFromPreset,
+      });
+      return [];
     }
     State.set('hotelConfig', arr);
     return arr;
