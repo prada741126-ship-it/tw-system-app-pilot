@@ -1,5 +1,5 @@
-// [BUILD] v2.4.14_1788243248
-window.TW_BUILD_VERSION = "v2.4.14_1788243248";
+// [BUILD] v2.4.15_1788245500
+window.TW_BUILD_VERSION = "v2.4.15_1788245500";
 
 // [DEV BUILD] 測試環境 — 資料導向 taiwan_data_dev/，不污染正式資料
 window.TW_DEV_MODE = true;
@@ -2395,6 +2395,50 @@ function deferSeedDecision(opts) {
     // Firebase 尚未就緒 → 等 init 完成再探（init 冪等，回同一個 promise）
     FirebaseSync.init().then(function() { _probe(); });
   }
+}
+
+
+/* v2.4.15 啟動時自動清理本地種子污染（v2.4.14 以前的裝置曾因 localStorage 空 → seed → 上傳 →
+   後續又因 storage 被清再 seed → 雖云端墓碑化已清，但若用戶手機 localStorage 還留著舊種子會誤顯預設值）
+   規則：localStorage 有 _fbKey、雲端無此 _fbKey → 視為本機殘留種子，刪除
+   範圍：catalog / hotelConfig（其他集合沒有 seed 概念，不處理） */
+function syncCleanupSeedPollution() {
+  if (typeof FirebaseSync === 'undefined' || !FirebaseSync.isReady()) return;
+  var sets = [
+    { storeKey: STORAGE_KEYS.CATALOG,      fbPath: FB_PATH.CATALOG,      stateKey: 'catalog',     event: EVENTS.CATALOG_LOADED },
+    { storeKey: STORAGE_KEYS.HOTEL_CONFIG, fbPath: FB_PATH.HOTEL_CONFIG, stateKey: 'hotelConfig', event: EVENTS.HOTEL_CONFIG_LOADED },
+  ];
+  sets.forEach(function(s) {
+    FirebaseSync.once(s.fbPath).then(function(remote) {
+      var local = Store.readArray(s.storeKey) || [];
+      if (local.length === 0) return;
+      var cloudKeys = {};
+      Object.keys(remote || {}).forEach(function(k) { cloudKeys[k] = true; });
+      var cleaned = local.filter(function(r) {
+        if (!r || !r._fbKey) return true; // 沒 _fbKey 的本地項（非同步記錄）保留
+        return !!cloudKeys[r._fbKey];      // 雲端有此 _fbKey 保留；雲端無 → 本地污染，刪除
+      });
+      if (cleaned.length !== local.length) {
+        Store.writeArray(s.storeKey, cleaned);
+        State.set(s.stateKey, cleaned);
+        if (s.event && EVENTS[s.event]) EventBus.emit(s.event, cleaned);
+        console.log('[v2.4.15 cleanup] ' + s.stateKey + ' 移除 ' + (local.length - cleaned.length) + ' 筆本機種子污染（雲端無對應 _fbKey）');
+      }
+    }).catch(function() { /* 雲端讀取失敗，跳過此次清理 */ });
+  });
+}
+
+/* v2.4.15 提供設定頁呼叫：一鍵清除 tw1d_ 前綴的本機資料，讓 deferSeedDecision + watcher 從雲端重新整理
+   （用戶手機 localStorage 殘留舊 seed、或懷疑同步狀態不一致時使用） */
+function syncResetLocalFromCloud() {
+  var keys = [];
+  for (var i = 0; i < localStorage.length; i++) {
+    var k = localStorage.key(i);
+    if (k && k.indexOf('tw1d_') === 0) keys.push(k);
+  }
+  keys.forEach(function(k) { localStorage.removeItem(k); });
+  console.log('[v2.4.15 reset] 清除 ' + keys.length + ' 個本機 tw1d_ 鍵，將從雲端重整');
+  return keys.length;
 }
 
 
@@ -14739,6 +14783,12 @@ var SettingsPage = (function() {
             '<input type="file" id="bk-import-file" accept=".json,application/json" class="form-input form-input-file" ' +
             'onchange="SettingsPage.onImportFile(this)"></div>';
     html += '</div></div>';
+
+    // v2.4.15 同步維護：重置本地資料（雲端為準）
+    html += '<div class="card"><div class="card-header"><h3>同步維護</h3></div>';
+    html += '<p class="section-desc">若手機資料看起來與雲端不一致（如看到舊預設值、缺資料），可用此功能清空手機本機快取，從雲端重整。注意：若本機有未同步的編輯，會被雲端覆蓋；建議先匯出備份。</p>';
+    html += '<div class="form-group"><button class="btn" onclick="SettingsPage.resetLocalFromCloud()">重置本地資料（從雲端重整）</button></div>';
+    html += '</div></div>';
     return html;
   }
 
@@ -14927,7 +14977,19 @@ var SettingsPage = (function() {
     });
   }
 
-  return { render: render, saveRate: saveRate, updateHall: updateHall, toggleRebate: toggleRebate, toggleCard: toggleCard, updateTicket: updateTicket, logout: logout, resetMyPassword: resetMyPassword, changePwdModal: changePwdModal, changePwdSubmit: changePwdSubmit, addUser: addUser, updateUserRole: updateUserRole, toggleUserEnabled: toggleUserEnabled, resetUserPassword: resetUserPassword, deleteUserAccount: deleteUserAccount, editUser: editUser, saveUserEdit: saveUserEdit, addEmployee: addEmployee, delEmployee: delEmployee, exportBackup: exportBackup, onImportFile: onImportFile, saveReminder: saveReminder, resolveConflict: resolveConflict, clearConflicts: clearConflicts, restoreItem: restoreItem, dropItem: dropItem };
+  function resetLocalFromCloud() {
+    Modal.confirm('確定要清空手機本機資料，從雲端重整嗎？\n\n建議：先匯出備份。\n清空後 APP 會自動 reload，從雲端拉回所有資料。', function() {
+      var cleared = syncResetLocalFromCloud();
+      if (cleared === 0) {
+        Toast.warning('本機無資料需要清空');
+      } else {
+        Toast.success('已清除 ' + cleared + ' 個本機鍵，準備從雲端重整');
+        setTimeout(function() { location.reload(); }, 1200);
+      }
+    });
+  }
+
+  return { render: render, saveRate: saveRate, updateHall: updateHall, toggleRebate: toggleRebate, toggleCard: toggleCard, updateTicket: updateTicket, logout: logout, resetMyPassword: resetMyPassword, changePwdModal: changePwdModal, changePwdSubmit: changePwdSubmit, addUser: addUser, updateUserRole: updateUserRole, toggleUserEnabled: toggleUserEnabled, resetUserPassword: resetUserPassword, deleteUserAccount: deleteUserAccount, editUser: editUser, saveUserEdit: saveUserEdit, addEmployee: addEmployee, delEmployee: delEmployee, exportBackup: exportBackup, onImportFile: onImportFile, saveReminder: saveReminder, resolveConflict: resolveConflict, clearConflicts: clearConflicts, restoreItem: restoreItem, dropItem: dropItem, resetLocalFromCloud: resetLocalFromCloud };
 })();
 
 
@@ -15513,6 +15575,8 @@ function initApp() {
     if (db) {
       console.log('[App] Firebase 已连接');
       Watchers.init();
+      // v2.4.15 啟動時自動清理本地種子污染（雲端無對應 _fbKey 的本機項）
+      setTimeout(syncCleanupSeedPollution, 2000); // 等 watcher 第一次同步後再比對
       // 連線恢復時線上覆核權限（偵測停用/移除/權限變更）
       EventBus.on(EVENTS.CONNECTION_CHANGED, function(connected) {
         if (connected && Auth.getCurrent()) Auth.reverify();
