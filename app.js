@@ -1,5 +1,5 @@
-// [BUILD] v2.4.15_1788245500
-window.TW_BUILD_VERSION = "v2.4.15_1788245500";
+// [BUILD] v2.4.16_1788247891
+window.TW_BUILD_VERSION = "v2.4.16_1788247891";
 
 // [DEV BUILD] 測試環境 — 資料導向 taiwan_data_dev/，不污染正式資料
 window.TW_DEV_MODE = true;
@@ -2402,8 +2402,15 @@ function deferSeedDecision(opts) {
    後續又因 storage 被清再 seed → 雖云端墓碑化已清，但若用戶手機 localStorage 還留著舊種子會誤顯預設值）
    規則：localStorage 有 _fbKey、雲端無此 _fbKey → 視為本機殘留種子，刪除
    範圍：catalog / hotelConfig（其他集合沒有 seed 概念，不處理） */
+var _cleanupRetry = 0; // v2.4.16 未就緒時延遲重試（登入後認證未完成可能 miss，最多 3 次）
 function syncCleanupSeedPollution() {
-  if (typeof FirebaseSync === 'undefined' || !FirebaseSync.isReady()) return;
+  if (typeof FirebaseSync === 'undefined' || !FirebaseSync.isReady()) {
+    if (_cleanupRetry < 3) {
+      _cleanupRetry++;
+      setTimeout(syncCleanupSeedPollution, 5000);
+    }
+    return;
+  }
   var sets = [
     { storeKey: STORAGE_KEYS.CATALOG,      fbPath: FB_PATH.CATALOG,      stateKey: 'catalog',     event: EVENTS.CATALOG_LOADED },
     { storeKey: STORAGE_KEYS.HOTEL_CONFIG, fbPath: FB_PATH.HOTEL_CONFIG, stateKey: 'hotelConfig', event: EVENTS.HOTEL_CONFIG_LOADED },
