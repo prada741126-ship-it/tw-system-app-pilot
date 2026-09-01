@@ -7,7 +7,7 @@
  *   - 其他 → stale-while-revalidate
  */
 
-var CACHE_VERSION = 'tw-app-v2.4.14';  // 2026-09-01 v2.4.14 種入延遲決策：Catalog/HotelConfig 首載不立即種預設，先探雲端（有資料就不種，防新裝置重複批次污染）；cacheFirst 加 ignoreSearch（app.js?v= 時間戳引用才能命中預快取，離線可用）
+var CACHE_VERSION = 'tw-app-v2.4.15';  // 2026-09-01 v2.4.15 啟動自動清理本地種子污染 + 設置頁「重置本地資料」按鈕
 var STATIC_CACHE = CACHE_VERSION + '-static';
 var RUNTIME_CACHE = CACHE_VERSION + '-runtime';
 
