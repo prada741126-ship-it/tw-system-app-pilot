@@ -1,5 +1,5 @@
-// [BUILD] v2.4.12_1788237379
-window.TW_BUILD_VERSION = "v2.4.12_1788237379";
+// [BUILD] v2.4.13_1788240914
+window.TW_BUILD_VERSION = "v2.4.13_1788240914";
 
 // [DEV BUILD] 測試環境 — 資料導向 taiwan_data_dev/，不污染正式資料
 window.TW_DEV_MODE = true;
@@ -17442,6 +17442,90 @@ var IosPWA = (function() {
 
 
 
+// === APP Module: version-check.js ===
+/**
+ * v2.4.13 版本輪詢自動重載
+ * 每 15 分鐘 + APP 回到前景時 fetch version.json（網路、禁快取），
+ * 與 window.TW_BUILD_VERSION 比對；發現更新版本 →
+ *   1) 觸發 Service Worker 立即更新（controllerchange 既有監聽會自動 reload）
+ *   2) 保險：數秒後自行 reload（若 SW 未觸發）
+ * Modal 開啟或輸入中 → 延後 30 秒再試，不打斷操作。
+ * 只往新版本更新（版本號較舊不自動套用），避免 reload 迴圈。
+ */
+var VersionCheck = (function() {
+  var POLL_MS = 15 * 60 * 1000;
+  var _notified = false;
+  var _reloading = false;
+
+  /* 'v2.4.13_1788...' → 可比較數字 */
+  function _verNum(v) {
+    var m = /^v(\d+)\.(\d+)\.(\d+)/.exec(String(v || ''));
+    if (!m) return 0;
+    return (+m[1]) * 1000000 + (+m[2]) * 1000 + (+m[3]);
+  }
+
+  /* 使用者操作中（Modal 開啟 / 輸入中）→ 不打斷 */
+  function _busy() {
+    if (typeof Modal !== 'undefined' && Modal.isOpen()) return true;
+    var el = document.activeElement;
+    if (!el) return false;
+    var t = el.tagName;
+    return (t === 'INPUT' || t === 'TEXTAREA' || t === 'SELECT') && !el.disabled;
+  }
+
+  async function check() {
+    var local = window.TW_BUILD_VERSION || '';
+    if (!local || _reloading) return;
+    try {
+      var res = await fetch('version.json?ts=' + Date.now(), { cache: 'no-store' });
+      if (!res.ok) return;
+      var data = await res.json();
+      var remote = String((data && data.version) || '');
+      if (!remote || _verNum(remote) <= _verNum(local)) return;
+      _apply(remote);
+    } catch (e) { /* 離線或失敗：靜默，下次輪詢再試 */ }
+  }
+
+  function _apply(remote) {
+    /* 1) SW 立即檢查更新：SW 檔有變 → 安裝 → skipWaiting → controllerchange → 自動 reload */
+    try {
+      if (navigator.serviceWorker && navigator.serviceWorker.getRegistration) {
+        navigator.serviceWorker.getRegistration().then(function(reg) {
+          if (reg && reg.update) { try { reg.update(); } catch (e) {} }
+        }).catch(function() {});
+      }
+    } catch (e) {}
+    /* 2) 保險：3.5 秒後自行判斷時機 reload（若 SW 已先 reload，本段不會執行） */
+    setTimeout(function() { _reloadWhenSafe(remote); }, 3500);
+  }
+
+  function _reloadWhenSafe(remote) {
+    if (_reloading) return;
+    if (_busy()) {
+      setTimeout(function() { _reloadWhenSafe(remote); }, 30000);
+      return;
+    }
+    if (!_notified) {
+      _notified = true;
+      try { Toast.info('已發布新版本 ' + remote.split('_')[0] + '，自動更新中…'); } catch (e) {}
+    }
+    _reloading = true;
+    setTimeout(function() { window.location.reload(); }, 2000);
+  }
+
+  function start() {
+    document.addEventListener('visibilitychange', function() {
+      if (document.visibilityState === 'visible') setTimeout(check, 800);
+    });
+    setInterval(check, POLL_MS);
+    setTimeout(check, 3000);
+  }
+
+  return { start: start, check: check };
+})();
+
+
+
 // === APP Bootstrap ===
 (function() {
   // 等待 DOM 就緒後初始化 APP 功能
@@ -17451,6 +17535,7 @@ var IosPWA = (function() {
     if (typeof NativeBridge !== "undefined") NativeBridge.init();
     if (typeof MobileUI !== "undefined") MobileUI.init();
     if (typeof IosPWA !== "undefined") IosPWA.init();
+    if (typeof VersionCheck !== "undefined") VersionCheck.start();
     
     // 覆寫 handleLogin：Phase 1A 個別帳號登入（推播註冊 + 觸覺回饋）
     var _origHandleLogin = window.handleLogin;
