@@ -1,5 +1,5 @@
-// [BUILD] v2.4.16_1788247891
-window.TW_BUILD_VERSION = "v2.4.16_1788247891";
+// [BUILD] v2.4.17_1788252057
+window.TW_BUILD_VERSION = "v2.4.17_1788252057";
 
 // [DEV BUILD] 測試環境 — 資料導向 taiwan_data_dev/，不污染正式資料
 window.TW_DEV_MODE = true;
@@ -2436,12 +2436,15 @@ function syncCleanupSeedPollution() {
 }
 
 /* v2.4.15 提供設定頁呼叫：一鍵清除 tw1d_ 前綴的本機資料，讓 deferSeedDecision + watcher 從雲端重新整理
-   （用戶手機 localStorage 殘留舊 seed、或懷疑同步狀態不一致時使用） */
+   （用戶手機 localStorage 殘留舊 seed、或懷疑同步狀態不一致時使用）
+   v2.4.17 修正：保留登入 session（tw1d_auth），避免重置後被登出、資料要重登才回來 */
 function syncResetLocalFromCloud() {
+  var keep = {};
+  keep[STORAGE_KEYS.AUTH] = true; // 登入 session 必須保留，重置 ≠ 登出
   var keys = [];
   for (var i = 0; i < localStorage.length; i++) {
     var k = localStorage.key(i);
-    if (k && k.indexOf('tw1d_') === 0) keys.push(k);
+    if (k && k.indexOf('tw1d_') === 0 && !keep[k]) keys.push(k);
   }
   keys.forEach(function(k) { localStorage.removeItem(k); });
   console.log('[v2.4.15 reset] 清除 ' + keys.length + ' 個本機 tw1d_ 鍵，將從雲端重整');
