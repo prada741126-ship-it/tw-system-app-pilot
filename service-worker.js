@@ -7,7 +7,7 @@
  *   - 其他 → stale-while-revalidate
  */
 
-var CACHE_VERSION = 'tw-app-v2.4.15';  // 2026-09-01 v2.4.15 啟動自動清理本地種子污染 + 設置頁「重置本地資料」按鈕
+var CACHE_VERSION = 'tw-app-v2.4.16';  // 2026-09-01 v2.4.16 清理未就緒時延遲重試（防登入後認證慢錯過）
 var STATIC_CACHE = CACHE_VERSION + '-static';
 var RUNTIME_CACHE = CACHE_VERSION + '-runtime';
 
