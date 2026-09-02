@@ -1,5 +1,5 @@
-// [BUILD] v2.4.17_1788252057
-window.TW_BUILD_VERSION = "v2.4.17_1788252057";
+// [BUILD] v2.4.18_1788334721
+window.TW_BUILD_VERSION = "v2.4.18_1788334721";
 
 // [DEV BUILD] 測試環境 — 資料導向 taiwan_data_dev/，不污染正式資料
 window.TW_DEV_MODE = true;
@@ -4248,6 +4248,8 @@ var Wallet = (function() {
       if (arr[idx]._deleted) return; // v2.3.4 已刪除（墓碑）流水不得由衍生對帳重建復活（刪除永遠贏）
       if (_same(arr[idx], entry)) return; // 完全相同 → 不動
       entry.createdAt = arr[idx].createdAt || now;
+      // v2.4.18 封存標記不可被重建抹掉：來源/既有任一有 sealedAt → 保留（已封存團流水隨團隱藏）
+      if (!entry.sealedAt && arr[idx].sealedAt) entry.sealedAt = arr[idx].sealedAt;
     } else {
       entry.createdAt = now;
     }
@@ -4279,6 +4281,8 @@ var Wallet = (function() {
     if (!tx) return;
     if (tx._deleted) { removeForTx(tx.id); return; }
     var m = (typeof Members !== 'undefined') ? Members.getById(tx.memberId) : null;
+    // v2.4.18 來源帳務已封存 → 重建流水亦帶 sealedAt（reconcileAll 不把封存流水洗回錢包）
+    var srcSealed = tx.sealedAt || 0;
 
     var chip = Math.round(chipNetHKD(tx));
     var chipId = 'wtx_' + tx.id;
@@ -4288,6 +4292,7 @@ var Wallet = (function() {
         type: tx.chipType === 'credit' ? 'credit_tx' : 'member_tx',
         refId: tx.id, tripId: tx.tripId, memberId: tx.memberId,
         amountHKD: chip, date: tx.date,
+        sealedAt: srcSealed,
         note: m ? (m.id + ' ' + (m.name || '')) : (tx.memberId || ''),
         detail: { outCode: tx.outCode || 0, backCode: tx.backCode || 0, chipType: tx.chipType || 'cash' },
       });
@@ -4303,6 +4308,7 @@ var Wallet = (function() {
         type: 'expense',
         refId: tx.id, tripId: tx.tripId, memberId: tx.memberId,
         amountHKD: -pay, date: tx.date,
+        sealedAt: srcSealed,
         note: m ? (m.id + ' ' + (m.name || '')) : (tx.memberId || ''),
         detail: { items: (tx.expenses || []).map(function(e) {
           return { name: e.name || '', amountHK: e.amountHK || 0, payout: _expPayout(e), absorbed: !!e.absorbed, fromPend: !!e.fromPend };

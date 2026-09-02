@@ -7,7 +7,7 @@
  *   - 其他 → stale-while-revalidate
  */
 
-var CACHE_VERSION = 'tw-app-v2.4.17';  // 2026-09-01 v2.4.17 重置本地資料保留登入 session（不再被登出）
+var CACHE_VERSION = 'tw-app-v2.4.18';  // 2026-09-02 v2.4.18 重建流水保留/帶入 sealedAt（封存團流水不再被 reconcileAll 洗回錢包頁）
 var STATIC_CACHE = CACHE_VERSION + '-static';
 var RUNTIME_CACHE = CACHE_VERSION + '-runtime';
 

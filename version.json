@@ -1,7 +1,7 @@
 {
-  "version": "v2.4.17_1788252057",
-  "buildTime": 1788252057,
-  "date": "2026-09-01",
+  "version": "v2.4.18_1788334721",
+  "buildTime": 1788334721,
+  "date": "2026-09-02",
   "dataRoot": "taiwan_data/pilot",
-  "notes": "v2.4.17 修正「重置本地資料」按鈕會登出的 bug：syncResetLocalFromCloud 保留登入 session（tw1d_auth），只清資料鍵 — 按完自動 reload 後維持登入狀態，直接從雲端拉回資料，不再跳回登入畫面。"
+  "notes": "v2.4.18 修復「封存團流水被 reconcileAll 洗回錢包頁」：_upsert 既有 sealedAt 保留（重建不得抹掉封存標記）+ syncForTx 來源帳務 sealedAt 帶入衍生流水 — 已封存的 33 筆流水不再因 APP 重建而重新顯示在錢包頁。"
 }
