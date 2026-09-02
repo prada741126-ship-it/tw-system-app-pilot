@@ -4234,7 +4234,8 @@ var Wallet = (function() {
   // —— 冪等寫入：內容相同則不動（避免同步迴圈）——
   function _same(a, b) {
     if (!a || !b) return false;
-    var keys = ['type', 'amountHKD', 'date', 'refId', 'tripId', 'memberId', 'category', 'note'];
+    // v2.4.18 sealedAt 納入比較：本地缺封存標記但來源已封存 → 視為不同，允許重建補上（只差 sealedAt 也要能自癒）
+    var keys = ['type', 'amountHKD', 'date', 'refId', 'tripId', 'memberId', 'category', 'note', 'sealedAt'];
     for (var i = 0; i < keys.length; i++) {
       if ((a[keys[i]] || '') !== (b[keys[i]] || '')) return false;
     }
