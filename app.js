@@ -4335,6 +4335,8 @@ var Wallet = (function() {
     if (p._deleted) { removeForPend(p.id); return; }
     var t = (typeof Trips !== 'undefined') ? Trips.getById(p.tripId) : null;
     var pay = pendPayoutHKD(p);
+    // v2.4.18 來源預支單已封存 → 重建流水亦帶 sealedAt（與 syncForTx 同款防護，防 reconcilePends 洗回封存流水）
+    var srcSealed = p.sealedAt || 0;
     var id = 'wtx_pexp_' + p.id;
     if (pay > 0) {
       _upsert({
@@ -4342,6 +4344,7 @@ var Wallet = (function() {
         type: 'pexp',
         refId: p.id, tripId: p.tripId,
         amountHKD: -pay, date: p.date,
+        sealedAt: srcSealed,
         note: (t ? Trips.displayName(t) : p.tripId) + ' 預支',
         detail: { items: (p.rows || []).map(function(e) {
           return { name: e.name || '', qty: e.quantity || 1, amountHK: e.amountHK || 0, payout: _expPayout(e) || e.payout || e.amountHK || 0 };
